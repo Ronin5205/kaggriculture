@@ -72,7 +72,8 @@ OBJECT_TYPES = {
         "seed_cost": 80,
         "base_market_price": 250,
         "time_to_first_yield_days": 10,
-        "time_to_max_yield_days": 10,
+        "time_to_max_yield_days": 10,       # yield caps at age 10
+        "bonus_window_end_days": 12,        # watering window ages 6–12
         "subsequent_yields": "none",
         "max_yield": 6,
         "action_cost": 1,
@@ -271,3 +272,46 @@ CONFIGURATION_DEFAULTS = {
     "townCenterSellInterval": 12,    # turns between town center consumption ticks
     "seed": None,                    # optional deterministic episode seed
 }
+
+# ---------------------------------------------------------------------------
+# Meta farm targets (2026-08-05 modal ladder farm)
+# ---------------------------------------------------------------------------
+
+META_TARGETS = {
+    "COW": 8,
+    "SHEEP": 5,
+    "STRAWBERRY": 6,
+    "WHEAT": 1,                 # feed tile; extra wheat bought as product
+    "HANDS": 12,
+    "LAND": ("NW", "NE", "SW"),  # never SE
+}
+
+# Early capital seeds (days 0–4 buy cadence targets, soft)
+EARLY_SEED_TARGETS = {
+    "WHEAT": 17,
+    "MELON": 10,
+    "STRAWBERRY": 2,
+}
+
+# Metered sell batch sizes (units per SELL order)
+SELL_BATCH = {
+    "WHEAT": 8,
+    "MELON": 8,
+    "MILK": 7,
+    "WOOL": 7,
+    "STRAWBERRY": 8,
+    "FERTILIZER": 4,
+    "EGG": 8,
+    "TOMATO": 4,
+    "CARROT": 4,
+}
+
+# Soft price floor: sell while price > max(PRICE_FLOOR, floor_frac * base)
+SELL_PRICE_FLOOR_FRAC = 0.20
+
+# Day to start unlocking extra land (median first BUY_LAND ~7)
+LAND_BUY_DAY = 7
+
+# Shed-adjacent standing tiles (orthogonal access to shed)
+SHED_ADJACENT = ((4, 4), (5, 4), (4, 5), (5, 5))
+SHED_CENTER = (4.5, 4.5)

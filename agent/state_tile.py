@@ -30,7 +30,7 @@ day boundaries, alongside the once-per-day functions.
 
 import random
 
-from constants import (
+from .constants import (
     OBJECT_TYPES,
     CONSECUTIVE_UNWATERED_TO_WEED,
     CONSECUTIVE_UNFED_TO_ESCAPE,
@@ -160,7 +160,12 @@ def analyze_farm(farm, current_day=None):
         "structures_empty": [],  # unoccupied coop/pasture
         "structures_occupied": [],  # (x, y, animal)
         "unfed_animals": [],
+        "uncared_animals": [],   # occupied, not cared today
+        "harvestable_animals": [],  # occupied with yield_units > 0
         "collectible_fertilizer": [],
+        "pastures": [],          # all PASTURE tiles (x, y)
+        "crop_counts": {},       # crop -> count
+        "animal_counts": {},     # animal -> count
     }
 
     tiles = farm["tiles"]
@@ -173,19 +178,31 @@ def analyze_farm(farm, current_day=None):
             elif is_weed(tile):
                 summary["weeds"].append((x, y))
             elif is_plant(tile):
-                summary["plants"].append((x, y, tile["crop"]))
+                crop = tile["crop"]
+                summary["plants"].append((x, y, crop))
+                summary["crop_counts"][crop] = summary["crop_counts"].get(crop, 0) + 1
                 if not tile["watered_today"]:
                     summary["unwatered_plants"].append((x, y))
                 if tile["yield_units"] > 0:
                     summary["harvestable_plants"].append((x, y))
             elif is_animal_structure(tile):
-                if tile["animal"] is None:
+                if tile.get("kind") == "PASTURE":
+                    summary["pastures"].append((x, y))
+                if tile.get("animal") is None:
                     summary["structures_empty"].append((x, y))
                 else:
-                    summary["structures_occupied"].append((x, y, tile["animal"]))
-                    if not tile["fed_today"]:
+                    animal = tile["animal"]
+                    summary["structures_occupied"].append((x, y, animal))
+                    summary["animal_counts"][animal] = (
+                        summary["animal_counts"].get(animal, 0) + 1
+                    )
+                    if not tile.get("fed_today"):
                         summary["unfed_animals"].append((x, y))
-                    if tile["fertilizer_available"]:
+                    if not tile.get("cared_today"):
+                        summary["uncared_animals"].append((x, y))
+                    if tile.get("yield_units", 0) > 0:
+                        summary["harvestable_animals"].append((x, y))
+                    if tile.get("fertilizer_available"):
                         summary["collectible_fertilizer"].append((x, y))
 
     return summary
@@ -394,11 +411,16 @@ def dig_tile(tile):
 # ===========================================================================
 
 def _one_time_bonus_window(crop):
-    """(start_age, end_age) inclusive window where watering grows yield."""
+    """(start_age, end_age) inclusive window where watering grows yield.
+
+    Window starts at ceil(bonus_end / 2) ≈ (bonus_end + 1) // 2.
+    Melon uses bonus_window_end_days=12 (ages 6–12) while yield caps at
+    time_to_max_yield_days=10.
+    """
     cfg = OBJECT_TYPES[crop]
-    first_yield = cfg["time_to_first_yield_days"]
-    max_yield_day = cfg["time_to_max_yield_days"]
-    return first_yield, max_yield_day
+    bonus_end = cfg.get("bonus_window_end_days") or cfg["time_to_max_yield_days"]
+    bonus_start = (bonus_end + 1) // 2
+    return bonus_start, bonus_end
 
 
 def _ongoing_schedule(crop):
@@ -423,17 +445,19 @@ def _refresh_plant_end_of_day(tile, day):
         return {"kind": "WEED"}
 
     if crop in ONE_TIME_CROPS:
-        first_yield, max_yield_day = _one_time_bonus_window(crop)
-        if age == first_yield and tile["yield_units"] == 0:
-            tile["yield_units"] = 1  # base yield appears
-        elif watered and first_yield < age <= max_yield_day:
+        bonus_start, bonus_end = _one_time_bonus_window(crop)
+        first_yield = cfg["time_to_first_yield_days"]
+        max_yield_day = cfg["time_to_max_yield_days"]
+
+        if watered and bonus_start <= age <= bonus_end:
+            if tile["yield_units"] == 0:
+                tile["yield_units"] = 1
             growth = 2 if fertilized else 1
             tile["yield_units"] = min(cfg["max_yield"], tile["yield_units"] + growth)
+        elif age >= first_yield and tile["yield_units"] == 0:
+            tile["yield_units"] = 1
 
-        # Lifespan decay begins one day after max_yield_day. Only mark the
-        # step it starts at here; the actual per-turn ticking is done by
-        # refresh_tile_end_of_turn() (decay runs "every other turn", not
-        # once daily).
+        # Lifespan decay begins one day after time_to_max_yield_days.
         if tile["max_lifespan_step"] == -1 and age >= max_yield_day + 1:
             tile["max_lifespan_step"] = day_to_step(day + 1)
 
