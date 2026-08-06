@@ -30,12 +30,20 @@ day boundaries, alongside the once-per-day functions.
 
 import random
 
-from constants import (
-    OBJECT_TYPES,
-    CONSECUTIVE_UNWATERED_TO_WEED,
-    CONSECUTIVE_UNFED_TO_ESCAPE,
-    TURNS_PER_DAY,
-)
+try:
+    from .constants import (
+        OBJECT_TYPES,
+        CONSECUTIVE_UNWATERED_TO_WEED,
+        CONSECUTIVE_UNFED_TO_ESCAPE,
+        TURNS_PER_DAY,
+    )
+except ImportError:  # pragma: no cover - script-style import fallback
+    from constants import (
+        OBJECT_TYPES,
+        CONSECUTIVE_UNWATERED_TO_WEED,
+        CONSECUTIVE_UNFED_TO_ESCAPE,
+        TURNS_PER_DAY,
+    )
 
 # ---------------------------------------------------------------------------
 # Crop / animal groupings
@@ -179,13 +187,13 @@ def analyze_farm(farm, current_day=None):
                 if tile["yield_units"] > 0:
                     summary["harvestable_plants"].append((x, y))
             elif is_animal_structure(tile):
-                if tile["animal"] is None:
+                if tile.get("animal") is None:
                     summary["structures_empty"].append((x, y))
                 else:
                     summary["structures_occupied"].append((x, y, tile["animal"]))
-                    if not tile["fed_today"]:
+                    if not tile.get("fed_today"):
                         summary["unfed_animals"].append((x, y))
-                    if tile["fertilizer_available"]:
+                    if tile.get("fertilizer_available"):
                         summary["collectible_fertilizer"].append((x, y))
 
     return summary
