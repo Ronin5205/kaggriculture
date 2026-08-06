@@ -47,3 +47,6 @@ submission.tar.gz
 replays/
 logs/
 replay.json
+
+# Analyzer outputs
+analysis_out/
