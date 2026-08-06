@@ -94,15 +94,28 @@ each farmer/hand to the closest feasible task (path via N/S/E/W).
 8. Build coops / plant wheat / dig weeds
 9. Drop sellable inventory at shed access tiles `(4,4),(5,4),(4,5),(5,5)`
 
+Within a priority band, targets are ordered **near the shed first** (snake
+within equal distance). Each job goes to the **closest free unit**, and steps
+prefer the longer axis — so crews expand outward from spawn instead of
+sweeping the top row then walking down.
+
+### Hiring
+
+Hire enough hands to keep the crew busy for ~21 turns (small slack, not a
+long idle tail). Crew size is `ceil(today's tile-jobs / (21 × 0.72))`, capped
+at farmer+5, with top-ups allowed through hour 3 if backlog still exceeds
+capacity. Pathing (near-shed order + closest unit) is what cuts wasted walks;
+hiring stays matched to workload.
+
 ## Market policy
 
-- **Eggs / excess wheat**: sell aggressively (price-tolerant).
-- **Keep** `WHEAT_FEED_BUFFER_DAYS × flock` wheat until wind-down.
-- **Premium** (melon, milk, wool, strawberry): at most 1 unit/turn unless
-  price ≥ threshold or season end — avoids slamming inventory past `I0` onto
-  the $1 floor.
-- Never sell live animals.
-- Max 10 market orders/turn (`maxMarketOrdersPerTurn`).
+- **Stock when cheap:** `BUY_PRODUCT WHEAT` while price ≤ $22 toward ~5 days of
+  feed; fertilizer when ≤ $70. Always leave ~12 shed slots for harvests.
+- **Sell into demand:** hold eggs until an egg shop unlocks (Bakery / Brunch),
+  price ≥ $48, day ≥ 12, or shed pressure. Same idea for wheat / premiums.
+- **Shed safety:** soft cap ~78 starts pressure sales; hard cap ~92 / wind-down
+  forces liquidation so end-of-day drops never discard into a full shed.
+- Never sell live animals. Max 10 market orders/turn.
 
 ## Important engine details the agent respects
 
