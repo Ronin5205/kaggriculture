@@ -273,27 +273,45 @@ CONFIGURATION_DEFAULTS = {
     "seed": None,                    # optional deterministic episode seed
 }
 
+import math
+
 # ---------------------------------------------------------------------------
-# Meta farm targets (2026-08-05 modal ladder farm)
+# Melon–Dairy Compound strategy targets
 # ---------------------------------------------------------------------------
 
+# Herd / crop targets by phase
+MELON_WAVE1 = 12
+MELON_WAVE2 = 24
+TARGET_COWS = 10
+TARGET_SHEEP = 0          # deferred; optional late only
+WHEAT_FEED_TILES = 3      # grow feed; buy product only for gaps
+TARGET_HANDS_MAX = 10
+TARGET_HANDS_MIN = 4
+
+# Phase day boundaries
+WAVE1_END_DAY = 10
+WAVE2_END_DAY = 22
+NO_LONG_CROP_AFTER_DAY = 20   # no new melon/strawberry
+SHORT_CYCLE_DAY = 23          # wheat short-cycle starts
+CASHOUT_DAY = 28              # force sell-down
+CASHOUT_FORCE_FLOOR_TURNS = 12  # last N turns: sell even near $1
+
+LAND_BUY_DAY = 7              # NE first; SW if tile-short for wave 2
+LAND_ORDER = ("NE", "SW")     # never SE
+
+# Legacy alias used by older helpers
 META_TARGETS = {
-    "COW": 8,
-    "SHEEP": 5,
-    "STRAWBERRY": 6,
-    "WHEAT": 1,                 # feed tile; extra wheat bought as product
-    "HANDS": 12,
-    "LAND": ("NW", "NE", "SW"),  # never SE
+    "COW": TARGET_COWS,
+    "SHEEP": TARGET_SHEEP,
+    "STRAWBERRY": 0,
+    "WHEAT": WHEAT_FEED_TILES,
+    "HANDS": TARGET_HANDS_MAX,
+    "LAND": ("NW", "NE", "SW"),
+    "MELON_WAVE1": MELON_WAVE1,
+    "MELON_WAVE2": MELON_WAVE2,
 }
 
-# Early capital seeds (days 0–4 buy cadence targets, soft)
-EARLY_SEED_TARGETS = {
-    "WHEAT": 17,
-    "MELON": 10,
-    "STRAWBERRY": 2,
-}
-
-# Metered sell batch sizes (units per SELL order)
+# Metered sell batch sizes (units per SELL order) — meta farms rhythm
 SELL_BATCH = {
     "WHEAT": 8,
     "MELON": 8,
@@ -307,11 +325,27 @@ SELL_BATCH = {
 }
 
 # Soft price floor: sell while price > max(PRICE_FLOOR, floor_frac * base)
-SELL_PRICE_FLOOR_FRAC = 0.20
+SELL_PRICE_FLOOR_FRAC = 0.15
+# Never hold milk/fert hoping for a bounce — sell down to a low absolute floor
+SELL_ABSOLUTE_MIN = {
+    "MILK": 8,
+    "FERTILIZER": 15,
+    "MELON": 20,
+    "WOOL": 10,
+    "WHEAT": 5,
+}
 
-# Day to start unlocking extra land (median first BUY_LAND ~7)
-LAND_BUY_DAY = 7
+# Hire: target_hands = clamp(2 + animals + ceil(plants/3), MIN, MAX)
+HIRE_BASE = 2
+HIRE_PLANTS_PER_HAND = 3
+MAX_HIRES_PER_TURN = 4
 
 # Shed-adjacent standing tiles (orthogonal access to shed)
 SHED_ADJACENT = ((4, 4), (5, 4), (4, 5), (5, 5))
 SHED_CENTER = (4.5, 4.5)
+
+
+def target_hands(n_animals, n_plants):
+    """Workload-based hire target — generous for chores, anti-idle."""
+    raw = HIRE_BASE + n_animals + math.ceil(max(0, n_plants) / HIRE_PLANTS_PER_HAND)
+    return max(TARGET_HANDS_MIN, min(TARGET_HANDS_MAX, raw))

@@ -1,4 +1,4 @@
-"""Meta farms agent — modal 2026-08-05 ladder strategy."""
+"""Melon–Dairy Compound agent — two-wave melons + CARE dairy + metered sells."""
 
 from .state_tile import analyze_farm
 from .market_policy import build_market_orders
@@ -7,12 +7,11 @@ from .tasks import build_tasks, assign_unit_action
 
 def agent(obs):
     """
-    Observation → action dict with farmer / hands / market ops.
+    Observation → action dict.
 
-    Targets: 8 cow + 5 sheep, 6 strawberry + 1 wheat, 12 hands, NE+NW+SW.
-    Pastures near shed; crops on outer tiles; metered sells.
+    Strategy: 12→24 watered melons, scale to ~10 CARE'd cows, metered sells,
+    late wheat short-cycle, endgame shed cashout. Pastures near shed; crops out.
     """
-    # Obs may be a dict-like wrapper from kaggle-environments.
     if not isinstance(obs, dict):
         try:
             obs = dict(obs)
@@ -42,15 +41,13 @@ def agent(obs):
     )
 
     hands_ops = []
-    hand_positions = me.get("hands") or []
-    for i, hand in enumerate(hand_positions):
+    for i, hand in enumerate(me.get("hands") or []):
         hpos = tuple(hand)
         hinv = inventories[i + 1] if i + 1 < len(inventories) else {}
         hands_ops.append(
             assign_unit_action(hpos, hinv, obs, summary, tasks, claimed)
         )
 
-    # Normalize ops to lists (engine accepts list form).
     def _norm(op):
         if op is None:
             return ["PASS"]

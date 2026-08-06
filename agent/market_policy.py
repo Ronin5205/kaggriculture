@@ -1,22 +1,36 @@
-"""Market-order policy for the meta farms agent."""
+"""Market-order policy — Melon–Dairy Compound strategy."""
 
 from .constants import (
-    META_TARGETS,
-    EARLY_SEED_TARGETS,
+    MELON_WAVE1,
+    MELON_WAVE2,
+    TARGET_COWS,
+    TARGET_SHEEP,
+    WHEAT_FEED_TILES,
+    WAVE1_END_DAY,
+    WAVE2_END_DAY,
+    NO_LONG_CROP_AFTER_DAY,
+    SHORT_CYCLE_DAY,
+    CASHOUT_DAY,
+    CASHOUT_FORCE_FLOOR_TURNS,
+    LAND_BUY_DAY,
+    LAND_ORDER,
+    LAND_COSTS,
     SELL_BATCH,
     SELL_PRICE_FLOOR_FRAC,
-    LAND_BUY_DAY,
-    LAND_COSTS,
+    SELL_ABSOLUTE_MIN,
     OBJECT_TYPES,
     MARKET_PARAMS,
     FIBONACCI_HIRE_SEQUENCE,
     PRICE_FLOOR,
+    TURNS_PER_DAY,
+    MAX_HIRES_PER_TURN,
+    target_hands,
 )
 
-MAX_HIRES_PER_TURN = 4
 MAX_ANIMALS_PER_TURN = 2
-# Keep enough cash for feed + a land payment buffer once expanding.
-MIN_CASH_BUFFER = 150
+MIN_CASH_BUFFER = 80
+# Keep enough cash for a small hire crew even when broke on feed/seeds
+HIRE_CASH_RESERVE = 40
 
 
 def _hire_cost(hires_today):
@@ -35,9 +49,14 @@ def _base_price(item):
     return 1
 
 
-def _should_sell(item, price):
+def _should_sell(item, price, force_cashout=False):
     if price is None:
         return False
+    if force_cashout:
+        return price >= PRICE_FLOOR
+    abs_min = SELL_ABSOLUTE_MIN.get(item)
+    if abs_min is not None:
+        return price >= abs_min
     floor = max(PRICE_FLOOR, int(_base_price(item) * SELL_PRICE_FLOOR_FRAC))
     return price > floor
 
@@ -54,7 +73,9 @@ def build_market_orders(obs, summary):
     player = obs.get("player", 0)
     me = obs["farms"][player]
     private = obs.get("private") or {}
-    day = obs.get("day", 0)
+    day = int(obs.get("day", 0) or 0)
+    hour = int(obs.get("hour", 0) or 0)
+    step = int(obs.get("step", day * TURNS_PER_DAY + hour) or 0)
     market_state = obs.get("market") or {}
     prices = market_state.get("prices") or {}
     money = float(me.get("money", 0) or 0)
@@ -70,6 +91,10 @@ def build_market_orders(obs, summary):
     crop_counts = summary.get("crop_counts") or {}
     n_cows = animal_counts.get("COW", 0)
     n_sheep = animal_counts.get("SHEEP", 0)
+    n_plants = sum(crop_counts.values())
+    melon_plants = crop_counts.get("MELON", 0)
+    wheat_plants = crop_counts.get("WHEAT", 0)
+
     shed_cows = int(shed.get("COW", 0) or 0)
     shed_sheep = int(shed.get("SHEEP", 0) or 0)
     inv_cows = _count_in_inv(inventories, "COW")
@@ -80,6 +105,34 @@ def build_market_orders(obs, summary):
     cows_owned = n_cows + shed_cows + inv_cows
     sheep_owned = n_sheep + shed_sheep + inv_sheep
     pending_animals = shed_cows + shed_sheep + inv_cows + inv_sheep
+    feed_need_heads = n_animals + pending_animals
+
+    # Phase flags
+    in_cashout = day >= CASHOUT_DAY
+    force_floor = in_cashout and (
+        day > CASHOUT_DAY
+        or hour >= TURNS_PER_DAY - CASHOUT_FORCE_FLOOR_TURNS
+        or step >= TURNS_PER_DAY * 30 - CASHOUT_FORCE_FLOOR_TURNS
+    )
+    allow_long_crops = day <= NO_LONG_CROP_AFTER_DAY
+    # Melon / cow targets by phase — delay full herd until wave-2 is mostly down
+    if day <= 5:
+        melon_target = MELON_WAVE1
+        cow_target = 2
+    elif day <= WAVE1_END_DAY:
+        melon_target = MELON_WAVE1
+        cow_target = 3
+    elif day <= WAVE2_END_DAY:
+        melon_target = MELON_WAVE2
+        if day <= 14:
+            cow_target = 5
+        elif day <= 18:
+            cow_target = 8
+        else:
+            cow_target = TARGET_COWS
+    else:
+        melon_target = 0
+        cow_target = TARGET_COWS
 
     orders = []
     spent = 0.0
@@ -96,161 +149,269 @@ def build_market_orders(obs, summary):
 
     wheat_price = float(prices.get("WHEAT", _base_price("WHEAT")) or 25)
     feed_wheat = int(shed.get("WHEAT", 0) or 0) + _count_in_inv(inventories, "WHEAT")
-    # Animals we will owe feed to (placed + about to place).
-    feed_need_heads = n_animals + pending_animals
 
-    # --- 1. Always secure feed before anything else ---
-    # Need at least 1 wheat per live/pending animal for today, plus a small stockpile.
-    feed_target = max(feed_need_heads + 2, unfed + 2) if feed_need_heads or unfed else 0
-    # Avoid staging huge feed buys before animals exist; 6 is enough to start.
-    if cows_owned + sheep_owned == 0 and day < 3:
-        feed_target = max(feed_target, 6)
-    elif feed_need_heads > 0:
-        feed_target = max(feed_target, min(feed_need_heads + 3, feed_need_heads + 6))
-
-    # Don't keep buying wheat every turn once stocked — burns cash.
-    if feed_target > feed_wheat and slots_left() > 0:
-        n = min(feed_target - feed_wheat, 8)
-        while n > 0 and money - spent < wheat_price * n:
-            n -= 1
-        if n > 0:
-            orders.append(["BUY_PRODUCT", "WHEAT", n])
-            pay(wheat_price * n)
-            feed_wheat += n
-
-    # --- 2. Buy animals gradually ---
-    animals_bought = 0
-    for animal, owned, target in (
-        ("COW", cows_owned, META_TARGETS["COW"]),
-        ("SHEEP", sheep_owned, META_TARGETS["SHEEP"]),
-    ):
-        gap = target - owned
-        if gap <= 0 or slots_left() <= 0 or animals_bought >= MAX_ANIMALS_PER_TURN:
-            continue
-        cost = OBJECT_TYPES[animal]["seed_cost"]
-        # Only buy if we can also afford tomorrow's feed for the new head.
-        n = 0
-        while (
-            n < gap
-            and animals_bought + n < MAX_ANIMALS_PER_TURN
-            and can_afford(cost * (n + 1) + wheat_price)
-        ):
-            n += 1
-        if n > 0:
-            orders.append(["BUY_ANIMAL", animal, n])
-            pay(cost * n)
-            animals_bought += n
-            feed_need_heads += n
-
-    # Top up feed again if we just bought animals.
-    if feed_wheat < feed_need_heads + 2 and slots_left() > 0 and feed_need_heads > 0:
-        n = min(feed_need_heads + 2 - feed_wheat, 8)
-        while n > 0 and money - spent < wheat_price * n:
-            n -= 1
-        if n > 0:
-            orders.append(["BUY_PRODUCT", "WHEAT", n])
-            pay(wheat_price * n)
-            feed_wheat += n
-
-    # --- 3. Seeds (modest early buys) ---
-    straw_count = crop_counts.get("STRAWBERRY", 0)
-    wheat_plants = crop_counts.get("WHEAT", 0)
-    melon_plants = crop_counts.get("MELON", 0)
-
-    if day < 12 and slots_left() > 0:
-        want = min(EARLY_SEED_TARGETS["MELON"], 4) if day < 5 else 1
-        have = seeds.get("MELON", 0) + melon_plants
-        gap = want - have
+    # --- Day-0 melon seeds FIRST (capital engine) before feed/cows eat the budget ---
+    melon_seeds_ordered = 0
+    if day == 0 and allow_long_crops and slots_left() > 0 and not in_cashout:
+        have = int(seeds.get("MELON", 0) or 0) + melon_plants
+        gap = MELON_WAVE1 - have
         if gap > 0:
             cost = OBJECT_TYPES["MELON"]["seed_cost"]
-            n = min(gap, 2)
-            while n > 0 and not can_afford(cost * n):
+            n = min(gap, 12)
+            while n > 0 and money - spent < cost * n + 400:
                 n -= 1
             if n > 0:
                 orders.append(["BUY_SEED", "MELON", n])
                 pay(cost * n)
+                melon_seeds_ordered = n
 
-    if slots_left() > 0:
-        want = META_TARGETS["STRAWBERRY"]
-        if day < 5:
-            want = min(want, 2)
-        have = seeds.get("STRAWBERRY", 0) + straw_count
-        gap = want - have
-        if gap > 0 and (day >= 3 or money - spent > 800):
-            cost = OBJECT_TYPES["STRAWBERRY"]["seed_cost"]
-            n = min(gap, 2)
-            while n > 0 and not can_afford(cost * n):
+    # --- Endgame: sell-first cashout ---
+    sell_priority = [
+        "FERTILIZER", "MILK", "MELON", "WOOL", "STRAWBERRY", "WHEAT",
+        "EGG", "TOMATO", "CARROT",
+    ]
+    # Feed stock target — must match wheat sell reserve or we thrash buy/sell.
+    feed_target = 0
+    if feed_need_heads or unfed:
+        feed_target = max(feed_need_heads + 1, unfed + 1)
+    if day < 10 and feed_need_heads > 0:
+        # Modest bridge only — grow wheat tiles for the rest
+        feed_target = max(feed_target, feed_need_heads * 2 + 2)
+    wheat_reserve = feed_target
+    if force_floor:
+        wheat_reserve = unfed
+    elif in_cashout:
+        wheat_reserve = feed_need_heads
+    # Do not sell feed wheat until short-cycle surplus or cashout
+    allow_wheat_sell = in_cashout or day >= SHORT_CYCLE_DAY or wheat_plants >= WHEAT_FEED_TILES
+
+    def emit_sells(aggressive=False):
+        for item in sell_priority:
+            if slots_left() <= 0:
+                break
+            qty = int(shed.get(item, 0) or 0)
+            if item == "WHEAT":
+                if not allow_wheat_sell and not aggressive:
+                    continue
+                qty = max(0, qty - wheat_reserve)
+            if qty <= 0:
+                continue
+            price = prices.get(item)
+            if not _should_sell(item, price, force_cashout=force_floor or aggressive):
+                continue
+            batch = min(SELL_BATCH.get(item, 4), qty)
+            if item == "MELON" and qty >= 16 and not in_cashout:
+                batch = min(max(batch, 8), qty, 12)
+            if in_cashout:
+                batch = min(max(batch, SELL_BATCH.get(item, 4)), qty)
+            if batch > 0:
+                orders.append(["SELL", item, batch])
+                shed[item] = int(shed.get(item, 0) or 0) - batch
+        # Melon payday: multiple sell orders while inventory is high
+        while slots_left() > 0:
+            qty = int(shed.get("MELON", 0) or 0)
+            if qty <= 0:
+                break
+            price = prices.get("MELON")
+            if not _should_sell("MELON", price, force_cashout=force_floor or aggressive):
+                break
+            batch = min(8, qty)
+            orders.append(["SELL", "MELON", batch])
+            shed["MELON"] = qty - batch
+
+    if in_cashout:
+        emit_sells(aggressive=True)
+
+    # --- 1. Critical feed only (gap to unfed+1), keep hire reserve ---
+    critical_feed = max(unfed + 1, feed_need_heads) if (feed_need_heads or unfed) else 0
+    if critical_feed > feed_wheat and slots_left() > 0 and not (in_cashout and day >= 29):
+        n = min(critical_feed - feed_wheat, 6)
+        while n > 0 and money - spent - wheat_price * n < HIRE_CASH_RESERVE:
+            n -= 1
+        if n > 0:
+            orders.append(["BUY_PRODUCT", "WHEAT", n])
+            pay(wheat_price * n)
+            feed_wheat += n
+
+    # --- 1b. Hire early so planting/watering is not starved ---
+    if not in_cashout:
+        _add_hires(
+            orders, spent, money, hands, hires_today, n_animals,
+            max(n_plants, melon_target if allow_long_crops else n_plants),
+            slots_left, pay, max_orders, day=day,
+            pending_cows=shed_cows + inv_cows,
+        )
+
+    if in_cashout:
+        _add_hires(
+            orders, spent, money, hands, hires_today, n_animals, n_plants,
+            slots_left, pay, max_orders, day=day, pending_cows=shed_cows + inv_cows,
+        )
+        emit_sells(aggressive=True)
+        return orders[:max_orders]
+
+    # Metered sells early — free cash for seeds/cows/hires
+    emit_sells(aggressive=False)
+
+    # --- 2. Melon seeds (capital engine) — don't overbuy beyond plantable labor ---
+    if allow_long_crops and slots_left() > 0 and melon_target > 0:
+        have = int(seeds.get("MELON", 0) or 0) + melon_plants + melon_seeds_ordered
+        gap = melon_target - have
+        if gap > 0:
+            cost = OBJECT_TYPES["MELON"]["seed_cost"]
+            empties = len(summary.get("empty") or [])
+            n = min(gap, 12 if day == 0 else 6, max(empties, 1))
+            buf = 50 if day <= 1 else max(MIN_CASH_BUFFER, 150 + n_animals * 25)
+            while n > 0 and not can_afford(cost * n, buffer=buf):
                 n -= 1
             if n > 0:
-                orders.append(["BUY_SEED", "STRAWBERRY", n])
+                orders.append(["BUY_SEED", "MELON", n])
                 pay(cost * n)
+                melon_seeds_ordered += n
 
+    # Top-up feed toward feed_target after seeds (non-critical)
+    if feed_target > feed_wheat and slots_left() > 0 and day < WAVE1_END_DAY:
+        n = min(feed_target - feed_wheat, 4)
+        while n > 0 and not can_afford(wheat_price * n, buffer=HIRE_CASH_RESERVE):
+            n -= 1
+        if n > 0:
+            orders.append(["BUY_PRODUCT", "WHEAT", n])
+            pay(wheat_price * n)
+            feed_wheat += n
+
+    # --- 3. Cows (defer until wave-1 melons are mostly planted) ---
+    animals_bought = 0
+    cow_gap = cow_target - cows_owned
+    melons_ready = melon_plants + int(seeds.get("MELON", 0) or 0) >= MELON_WAVE1 - 2
+    # Don't buy cows while broke or before housing existing shed stock
+    can_buy_cows = (
+        cow_gap > 0
+        and slots_left() > 0
+        and shed_cows + inv_cows <= 1
+        and (day > WAVE1_END_DAY or (cows_owned < 2 and (day >= 1 or melons_ready)))
+        and money - spent > (800 if day > WAVE1_END_DAY else 300)
+        and (day >= 2 or melon_plants >= 8 or day > 0 and melons_ready)
+    )
+    if can_buy_cows:
+        cost = OBJECT_TYPES["COW"]["seed_cost"]
+        n = 0
+        while (
+            n < cow_gap
+            and animals_bought + n < MAX_ANIMALS_PER_TURN
+            and can_afford(cost * (n + 1) + wheat_price, buffer=100)
+        ):
+            n += 1
+        if n > 0:
+            orders.append(["BUY_ANIMAL", "COW", n])
+            pay(cost * n)
+            animals_bought += n
+            feed_need_heads += n
+
+    # Optional late sheep only if rich and tiles free (plan: usually 0)
+    if (
+        TARGET_SHEEP > 0
+        and day >= 15
+        and money - spent > 15000
+        and sheep_owned < TARGET_SHEEP
+        and slots_left() > 0
+        and animals_bought < MAX_ANIMALS_PER_TURN
+    ):
+        cost = OBJECT_TYPES["SHEEP"]["seed_cost"]
+        if can_afford(cost + wheat_price):
+            orders.append(["BUY_ANIMAL", "SHEEP", 1])
+            pay(cost)
+            animals_bought += 1
+
+    # Keep herd fed — escape is permanent; buy ahead when scaling
+    if feed_need_heads > 0 and slots_left() > 0:
+        need_feed = max(feed_need_heads + 3, n_animals + pending_animals + 2)
+        if day >= 12:
+            need_feed = max(need_feed, n_animals * 2)
+        if feed_wheat < need_feed:
+            n = min(need_feed - feed_wheat, 10)
+            while n > 0 and money - spent < wheat_price * n:
+                n -= 1
+            if n > 0:
+                orders.append(["BUY_PRODUCT", "WHEAT", n])
+                pay(wheat_price * n)
+                feed_wheat += n
+
+    # --- 4. Wheat seeds (grow feed; more in short-cycle phase) ---
     if slots_left() > 0:
-        # Grow our own feed tile + a few early wheat harvests.
-        want_seeds = 4 if day < 5 else max(0, META_TARGETS["WHEAT"] - wheat_plants)
-        have = seeds.get("WHEAT", 0)
-        gap = want_seeds - have if day < 5 else max(0, META_TARGETS["WHEAT"] - wheat_plants - have)
+        want_wheat = WHEAT_FEED_TILES
+        if day >= SHORT_CYCLE_DAY:
+            want_wheat = max(want_wheat, 8)  # short-cycle income tiles
+        have = int(seeds.get("WHEAT", 0) or 0) + wheat_plants
+        gap = want_wheat - have
         if gap > 0:
             cost = OBJECT_TYPES["WHEAT"]["seed_cost"]
-            n = min(gap, 4)
+            n = min(gap, 6)
             while n > 0 and not can_afford(cost * n):
                 n -= 1
             if n > 0:
                 orders.append(["BUY_SEED", "WHEAT", n])
                 pay(cost * n)
 
-    # --- 4. Land ---
-    target_land = set(META_TARGETS["LAND"])
-    if day >= LAND_BUY_DAY and slots_left() > 0:
-        for q in ("NE", "SW"):
-            if q in unlocked or q not in target_land:
-                continue
-            extras = len(unlocked) - 1
-            if 0 <= extras < len(LAND_COSTS):
-                cost = LAND_COSTS[extras]
-                if can_afford(cost, buffer=300):
-                    orders.append(["BUY_LAND"])
-                    pay(cost)
-            break
+    # Land NE then SW when tile-short for wave 2 (after melon payday)
+    if (
+        day >= LAND_BUY_DAY
+        and (day > WAVE1_END_DAY or money - spent > 4000)
+        and slots_left() > 0
+        and money - spent > 1500
+    ):
+        empties = len(summary.get("empty") or [])
+        seeds_m = int(seeds.get("MELON", 0) or 0)
+        need_tiles = (
+            (melon_target > melon_plants and seeds_m > empties - 4)
+            or empties < 8
+            or (day > WAVE1_END_DAY and "NE" not in unlocked and money - spent > 2500)
+        )
+        if need_tiles:
+            for q in LAND_ORDER:
+                if q in unlocked:
+                    continue
+                extras = len(unlocked) - 1
+                if 0 <= extras < len(LAND_COSTS):
+                    cost = LAND_COSTS[extras]
+                    buf = 800 if day <= WAVE1_END_DAY + 2 else 500
+                    if can_afford(cost, buffer=buf):
+                        orders.append(["BUY_LAND"])
+                        pay(cost)
+                        unlocked.append(q)
+                break
 
-    # --- 5. Metered sells ---
-    sell_priority = [
-        "FERTILIZER", "MILK", "WOOL", "MELON", "STRAWBERRY", "WHEAT",
-        "EGG", "TOMATO", "CARROT",
-    ]
-    wheat_reserve = max(feed_need_heads + 4, unfed + 4, 6 if n_animals else 0)
+    # --- 6. Top-up hires after spends (workload may have grown) ---
+    _add_hires(
+        orders, spent, money, hands, hires_today, n_animals, max(n_plants, melon_target),
+        slots_left, pay, max_orders, day=day,
+        pending_cows=shed_cows + inv_cows + animals_bought,
+    )
 
-    for item in sell_priority:
-        if slots_left() <= 0:
-            break
-        qty = int(shed.get(item, 0) or 0)
-        if item == "WHEAT":
-            # Never sell wheat while any animals are alive or pending.
-            if feed_need_heads > 0 or n_animals > 0:
-                continue
-            qty = max(0, qty - wheat_reserve)
-        if qty <= 0:
-            continue
-        price = prices.get(item)
-        if not _should_sell(item, price):
-            continue
-        batch = min(SELL_BATCH.get(item, 4), qty)
-        if batch > 0:
-            orders.append(["SELL", item, batch])
-            shed[item] = qty - batch
+    return orders[:max_orders]
 
-    # --- 6. Hire (keep a crew for feeding even when cash is tight) ---
+
+def _add_hires(orders, spent, money, hands, hires_today, n_animals, n_plants,
+               slots_left, pay, max_orders, day=0, pending_cows=0):
+    """Hire toward workload target; spend freely for min crew."""
+    want = target_hands(n_animals + pending_cows, n_plants)
+    # Melon rush: need bodies to plant/water 12 melons
+    if day <= 2:
+        want = max(want, 8)
+    elif n_plants >= 8:
+        want = max(want, 6)
+    already = sum(1 for o in orders if o and o[0] == "HIRE")
     hires_added = 0
-    min_hands = 6 if (feed_need_heads or n_animals) else 0
-    target_hands = META_TARGETS["HANDS"]
+    min_crew = min(want, max(4, n_animals + pending_cows + 2)) if (
+        n_animals or pending_cows or n_plants or day == 0
+    ) else 0
+
     while (
-        len(hands) + hires_added < target_hands
+        len(hands) + already + hires_added < want
         and hires_added < MAX_HIRES_PER_TURN
         and slots_left() > 0
     ):
-        cost = _hire_cost(hires_today + hires_added)
-        need_min = len(hands) + hires_added < min_hands
-        # Minimum crew: spend down to 0. Extra hands: keep a cash buffer.
+        cost = _hire_cost(hires_today + already + hires_added)
+        need_min = len(hands) + already + hires_added < min_crew
         if need_min:
             if money - spent < cost:
                 break
@@ -259,5 +420,3 @@ def build_market_orders(obs, summary):
         orders.append(["HIRE"])
         pay(cost)
         hires_added += 1
-
-    return orders[:max_orders]
