@@ -1,0 +1,350 @@
+{
+  "n_episodes": 27,
+  "n_player_games": 54,
+  "n_action_rows": 376940,
+  "n_market_rows": 48559,
+  "n_hourly_rows": 38880,
+  "top_agents": [
+    {
+      "agent": "Keito",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 137225.0,
+      "max_money": 137225.0,
+      "min_money": 137225.0,
+      "avg_margin": -4488.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Scorpi",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 135164.0,
+      "max_money": 135164.0,
+      "min_money": 135164.0,
+      "avg_margin": -13473.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "MD Concepcion",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 134380.0,
+      "max_money": 134380.0,
+      "min_money": 134380.0,
+      "avg_margin": -147.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Akash Deep",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 129364.0,
+      "max_money": 129364.0,
+      "min_money": 129364.0,
+      "avg_margin": -645.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Mohit Rao",
+      "games": 7,
+      "wins": 7,
+      "losses": 0,
+      "ties": 0,
+      "win_rate": 1.0,
+      "avg_money": 125702.6,
+      "max_money": 143136.0,
+      "min_money": 85215.0,
+      "avg_margin": 2452.6,
+      "top_strategies": "animal_open:7,melon_rush:7,hire_open_5:7,animal_core:7,hire_max:7",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Artem Voronov",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 124631.0,
+      "max_money": 124631.0,
+      "min_money": 124631.0,
+      "avg_margin": -1887.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "SALAH ELDIN ELNABARAWY",
+      "games": 2,
+      "wins": 2,
+      "losses": 0,
+      "ties": 0,
+      "win_rate": 1.0,
+      "avg_money": 119833.0,
+      "max_money": 134428.0,
+      "min_money": 105238.0,
+      "avg_margin": 1803.5,
+      "top_strategies": "animal_open:2,melon_rush:2,hire_open_5:2,animal_core:2,hire_max:2",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Konstantin03",
+      "games": 1,
+      "wins": 0,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 119292.0,
+      "max_money": 119292.0,
+      "min_money": 119292.0,
+      "avg_margin": -8924.0,
+      "top_strategies": "animal_open:1,melon_rush:1,hire_open_5:1,animal_core:1,hire_max:1",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "agent": "Seb (allegedly)",
+      "games": 7,
+      "wins": 6,
+      "losses": 1,
+      "ties": 0,
+      "win_rate": 0.857,
+      "avg_money": 117954.9,
+      "max_money": 148637.0,
+      "min_money": 94235.0,
+      "avg_margin": 13593.1,
+      "top_strategies": "animal_open:7,melon_lite:7,animal_max:7,hire_ultra:7,land_early:7",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_SEED,MELON,3)|(BUY_SEED,WHEAT,12)|(BUY_ANIMAL,COW,2)"
+    },
+    {
+      "agent": "Pranshu Ghori",
+      "games": 2,
+      "wins": 0,
+      "losses": 2,
+      "ties": 0,
+      "win_rate": 0.0,
+      "avg_money": 117373.0,
+      "max_money": 142077.0,
+      "min_money": 92669.0,
+      "avg_margin": -9605.0,
+      "top_strategies": "animal_open:2,melon_rush:2,hire_open_5:2,animal_core:2,hire_max:2",
+      "top_opening": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    }
+  ],
+  "top_strategies": [
+    {
+      "strategy": "primary_dairy",
+      "games": 20,
+      "wins": 10,
+      "win_rate": 0.5,
+      "avg_money": 122642.6
+    },
+    {
+      "strategy": "dairy_focus",
+      "games": 19,
+      "wins": 10,
+      "win_rate": 0.526,
+      "avg_money": 122590.5
+    },
+    {
+      "strategy": "hire_open_7",
+      "games": 6,
+      "wins": 5,
+      "win_rate": 0.833,
+      "avg_money": 120542.0
+    },
+    {
+      "strategy": "animal_care_ultra",
+      "games": 6,
+      "wins": 5,
+      "win_rate": 0.833,
+      "avg_money": 120486.5
+    },
+    {
+      "strategy": "melon_lite",
+      "games": 7,
+      "wins": 6,
+      "win_rate": 0.857,
+      "avg_money": 117954.9
+    },
+    {
+      "strategy": "animal_max",
+      "games": 7,
+      "wins": 6,
+      "win_rate": 0.857,
+      "avg_money": 117954.9
+    },
+    {
+      "strategy": "fert_seller_heavy",
+      "games": 7,
+      "wins": 6,
+      "win_rate": 0.857,
+      "avg_money": 117954.9
+    },
+    {
+      "strategy": "wool_focus",
+      "games": 20,
+      "wins": 11,
+      "win_rate": 0.55,
+      "avg_money": 117000.8
+    },
+    {
+      "strategy": "berry_plant_heavy",
+      "games": 51,
+      "wins": 25,
+      "win_rate": 0.49,
+      "avg_money": 113277.0
+    },
+    {
+      "strategy": "land_early",
+      "games": 52,
+      "wins": 26,
+      "win_rate": 0.5,
+      "avg_money": 113068.5
+    },
+    {
+      "strategy": "melon_plant_heavy",
+      "games": 53,
+      "wins": 27,
+      "win_rate": 0.509,
+      "avg_money": 112673.6
+    },
+    {
+      "strategy": "dairy_support",
+      "games": 12,
+      "wins": 5,
+      "win_rate": 0.417,
+      "avg_money": 112444.3
+    },
+    {
+      "strategy": "animal_care_heavy",
+      "games": 46,
+      "wins": 21,
+      "win_rate": 0.457,
+      "avg_money": 112100.9
+    },
+    {
+      "strategy": "melon_rush",
+      "games": 46,
+      "wins": 21,
+      "win_rate": 0.457,
+      "avg_money": 111870.0
+    },
+    {
+      "strategy": "hire_max",
+      "games": 46,
+      "wins": 21,
+      "win_rate": 0.457,
+      "avg_money": 111870.0
+    }
+  ],
+  "top_ops": [
+    {
+      "op": "WEST",
+      "count": 53350
+    },
+    {
+      "op": "PASS",
+      "count": 51724
+    },
+    {
+      "op": "NORTH",
+      "count": 50423
+    },
+    {
+      "op": "WATER",
+      "count": 47016
+    },
+    {
+      "op": "EAST",
+      "count": 39662
+    },
+    {
+      "op": "SOUTH",
+      "count": 33949
+    },
+    {
+      "op": "HARVEST",
+      "count": 19837
+    },
+    {
+      "op": "CARE",
+      "count": 17480
+    },
+    {
+      "op": "FEED",
+      "count": 17290
+    },
+    {
+      "op": "COLLECT_FERTILIZER",
+      "count": 14511
+    },
+    {
+      "op": "PICKUP",
+      "count": 10095
+    },
+    {
+      "op": "PLANT",
+      "count": 7764
+    },
+    {
+      "op": "DROP",
+      "count": 6190
+    },
+    {
+      "op": "FERTILIZE",
+      "count": 4069
+    },
+    {
+      "op": "DIG",
+      "count": 1962
+    }
+  ],
+  "top_openings": [
+    {
+      "games": 45,
+      "wins": 20,
+      "win_rate": 0.444,
+      "opening_fingerprint": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_ANIMAL,SHEEP,2)|(BUY_ANIMAL,COW,2)|(BUY_SEED,WHEAT,7)|(BUY_SEED,MELON,12)"
+    },
+    {
+      "games": 6,
+      "wins": 5,
+      "win_rate": 0.833,
+      "opening_fingerprint": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_SEED,MELON,3)|(BUY_SEED,WHEAT,12)|(BUY_ANIMAL,COW,2)"
+    },
+    {
+      "games": 1,
+      "wins": 1,
+      "win_rate": 1.0,
+      "opening_fingerprint": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_SEED,MELON,12)|(BUY_ANIMAL,COW,1)"
+    },
+    {
+      "games": 1,
+      "wins": 0,
+      "win_rate": 0.0,
+      "opening_fingerprint": "(BUY_PRODUCT,WHEAT,6)|(BUY_ANIMAL,COW,2)|(BUY_SEED,MELON,2)|(BUY_SEED,STRAWBERRY,2)|(BUY_SEED,WHEAT,4)|(HIRE)|(HIRE)|(HI..."
+    },
+    {
+      "games": 1,
+      "wins": 1,
+      "win_rate": 1.0,
+      "opening_fingerprint": "(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(HIRE)|(BUY_SEED,MELON,6)|(BUY_SEED,CARROT,1)|(BUY_SEED,WHEAT,12)|(BUY_ANIMAL,COW,2)"
+    }
+  ]
+}
