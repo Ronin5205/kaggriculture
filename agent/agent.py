@@ -1,4 +1,4 @@
-"""Labor–Herd Compound agent — day-0 pack, CARE dairy/sheep, straw + melons."""
+"""Labor–Herd Compound — Seb layout + user day-0 pack + smart watering."""
 
 from .state_tile import analyze_farm
 from .market_policy import build_market_orders
@@ -9,8 +9,10 @@ def agent(obs):
     """
     Observation → action dict.
 
-    Strategy: day-0 6hire/melon6/wheat12/cow2/sheep2, scale to ~20 CARE'd
-    animals, strawberries + melon wave-2, early land, metered sells, cashout.
+    Hardcoded from win replays (ep 90503598): pastures on shed ring, wheat NW,
+    melons beside pastures, strawberries after NE, water only when needed
+    (survival / growth window), CARE+FEED every animal-day.
+    Day-0 market: 6 HIRE + MELON6 + WHEAT12 + COW2 + SHEEP2.
     """
     if not isinstance(obs, dict):
         try:

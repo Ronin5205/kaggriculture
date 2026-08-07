@@ -87,18 +87,18 @@ def sort_by_shed_far(positions):
 
 def plantable_empties(empty, reserve_near_for_pastures=0):
     """
-    Empties eligible for planting: not shed-adjacent, optionally excluding
-    the N nearest tiles reserved for upcoming pastures.
+    Empties eligible for planting. Prefer tiles farther from shed so pastures
+    can claim the near ring — but shed-adjacent is allowed if needed.
     """
-    candidates = [p for p in empty if not is_shed_adjacent(p)]
+    candidates = list(empty)
     if reserve_near_for_pastures <= 0:
         return sort_by_shed_far(candidates)
     near = sort_by_shed_near(candidates)
     reserved = set(near[:reserve_near_for_pastures])
     plantable = [p for p in candidates if p not in reserved]
-    return sort_by_shed_far(plantable)
+    return sort_by_shed_far(plantable) if plantable else sort_by_shed_far(candidates)
 
 
 def pasture_empties(empty):
-    """Empties eligible for BUILD_PASTURE: not shed-adjacent, nearest first."""
-    return sort_by_shed_near([p for p in empty if not is_shed_adjacent(p)])
+    """Pasture sites: nearest to shed first, INCLUDING shed-adjacent (Seb builds on 4,4)."""
+    return sort_by_shed_near(list(empty))

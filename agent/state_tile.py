@@ -143,6 +143,36 @@ def describe_tile(tile, current_day=None):
     return "unknown"
 
 
+def plant_needs_water(tile, day):
+    """Seb-style watering: skip safe days; water survival + growth windows only.
+
+    After a watered day, consecutive_unwatered is 0 and the plant can skip one
+    day (weed threshold is 2). Day-1 Seb literally issued 0 WATER ops.
+    Always water when consecutive_unwatered >= 1 (includes planting day), or
+    when a yield-growth window is active.
+    """
+    if not is_plant(tile) or tile.get("watered_today"):
+        return False
+    if int(tile.get("consecutive_unwatered") or 0) >= 1:
+        return True
+    if day is None:
+        return False
+    crop = tile.get("crop")
+    planted = tile.get("planted_day")
+    if planted is None:
+        return False
+    age = int(day) - int(planted)
+    if crop in ONE_TIME_CROPS:
+        bonus_start, bonus_end = _one_time_bonus_window(crop)
+        if bonus_start <= age <= bonus_end:
+            return True
+    elif crop in ONGOING_CROPS:
+        schedule = _ongoing_schedule(crop)
+        if age in schedule:
+            return True
+    return False
+
+
 def analyze_farm(farm, current_day=None):
     """
     Scan a player's `farm["tiles"]` grid and summarize its state.
@@ -155,7 +185,8 @@ def analyze_farm(farm, current_day=None):
         "locked": [],
         "weeds": [],
         "plants": [],            # (x, y, crop)
-        "unwatered_plants": [],  # plants not yet watered today
+        "unwatered_plants": [],  # not watered_today (raw flag)
+        "needs_water_plants": [],  # Seb-style: survival or growth window
         "harvestable_plants": [],  # plants with yield_units > 0
         "structures_empty": [],  # unoccupied coop/pasture
         "structures_occupied": [],  # (x, y, animal)
@@ -183,6 +214,8 @@ def analyze_farm(farm, current_day=None):
                 summary["crop_counts"][crop] = summary["crop_counts"].get(crop, 0) + 1
                 if not tile["watered_today"]:
                     summary["unwatered_plants"].append((x, y))
+                if plant_needs_water(tile, current_day):
+                    summary["needs_water_plants"].append((x, y))
                 if tile["yield_units"] > 0:
                     summary["harvestable_plants"].append((x, y))
             elif is_animal_structure(tile):
