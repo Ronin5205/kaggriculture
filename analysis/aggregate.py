@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
+from .schema import ANIMALS, CROPS, PRODUCTS
+
 
 def _flat_player_row(episode: dict[str, Any], player: dict[str, Any]) -> dict[str, Any]:
     buy_seed = player.get("buy_seed") or {}
@@ -14,8 +16,16 @@ def _flat_player_row(episode: dict[str, Any], player: dict[str, Any]) -> dict[st
     sell_rev = player.get("sell_revenue") or {}
     unlock = player.get("unlock_day") or {}
     op_mix = player.get("op_mix") or {}
+    first_sell = player.get("first_sell_day") or {}
+    tags = list(player.get("strategies") or [])
 
-    return {
+    total_rev = float(player.get("total_sell_revenue") or 0) or 1.0
+    rev_by_prod = {prod: float(sell_rev.get(prod) or 0) for prod in PRODUCTS}
+    primary_product = max(rev_by_prod, key=rev_by_prod.get) if rev_by_prod else ""
+    if not primary_product or rev_by_prod.get(primary_product, 0) / total_rev < 0.15:
+        primary_product = ""
+
+    row: dict[str, Any] = {
         "episode_id": episode["episode_id"],
         "seed": episode.get("seed"),
         "player": player["player"],
@@ -40,36 +50,10 @@ def _flat_player_row(episode: dict[str, Any], player: dict[str, Any]) -> dict[st
         "unlock_NE": unlock.get("NE"),
         "unlock_SW": unlock.get("SW"),
         "unlock_SE": unlock.get("SE"),
-        "plants_wheat": plant.get("WHEAT", 0),
-        "plants_carrot": plant.get("CARROT", 0),
-        "plants_tomato": plant.get("TOMATO", 0),
-        "plants_strawberry": plant.get("STRAWBERRY", 0),
-        "plants_melon": plant.get("MELON", 0),
-        "buy_seed_wheat": buy_seed.get("WHEAT", 0),
-        "buy_seed_melon": buy_seed.get("MELON", 0),
-        "buy_seed_strawberry": buy_seed.get("STRAWBERRY", 0),
-        "buy_seed_tomato": buy_seed.get("TOMATO", 0),
-        "buy_seed_carrot": buy_seed.get("CARROT", 0),
-        "buy_cow": buy_animal.get("COW", 0),
-        "buy_sheep": buy_animal.get("SHEEP", 0),
-        "buy_goose": buy_animal.get("GOOSE", 0),
         "bought_wheat": player.get("bought_wheat"),
         "wheat_self_ratio": player.get("wheat_self_ratio"),
-        "sell_wheat": sell_qty.get("WHEAT", 0),
-        "sell_melon": sell_qty.get("MELON", 0),
-        "sell_strawberry": sell_qty.get("STRAWBERRY", 0),
-        "sell_milk": sell_qty.get("MILK", 0),
-        "sell_wool": sell_qty.get("WOOL", 0),
-        "sell_egg": sell_qty.get("EGG", 0),
-        "sell_fertilizer": sell_qty.get("FERTILIZER", 0),
-        "rev_wheat": sell_rev.get("WHEAT", 0),
-        "rev_melon": sell_rev.get("MELON", 0),
-        "rev_strawberry": sell_rev.get("STRAWBERRY", 0),
-        "rev_milk": sell_rev.get("MILK", 0),
-        "rev_wool": sell_rev.get("WOOL", 0),
-        "rev_egg": sell_rev.get("EGG", 0),
-        "rev_fertilizer": sell_rev.get("FERTILIZER", 0),
         "total_sell_revenue": player.get("total_sell_revenue"),
+        "primary_rev": primary_product.lower() if primary_product else None,
         "fertilize": player.get("fertilize"),
         "care": player.get("care"),
         "collect_fertilizer": player.get("collect_fertilizer"),
@@ -88,14 +72,28 @@ def _flat_player_row(episode: dict[str, Any], player: dict[str, Any]) -> dict[st
         "op_harvest": op_mix.get("HARVEST", 0),
         "op_plant": op_mix.get("PLANT", 0),
         "op_pass": op_mix.get("PASS", 0),
-        "strategies": ",".join(player.get("strategies") or []),
-        "first_sell_melon": (player.get("first_sell_day") or {}).get("MELON"),
-        "first_sell_milk": (player.get("first_sell_day") or {}).get("MILK"),
-        "first_sell_wool": (player.get("first_sell_day") or {}).get("WOOL"),
-        "first_sell_strawberry": (player.get("first_sell_day") or {}).get("STRAWBERRY"),
+        "strategies": ",".join(tags),
         "n_action_rows": len(player.get("action_log") or []),
         "n_market_rows": len(player.get("market_log") or []),
     }
+
+    for crop in CROPS:
+        key = crop.lower()
+        row[f"plants_{key}"] = plant.get(crop, 0)
+        row[f"buy_seed_{key}"] = buy_seed.get(crop, 0)
+
+    for animal in ANIMALS:
+        row[f"buy_{animal.lower()}"] = buy_animal.get(animal, 0)
+
+    for prod in PRODUCTS:
+        key = prod.lower()
+        rev = float(sell_rev.get(prod) or 0)
+        row[f"sell_{key}"] = sell_qty.get(prod, 0)
+        row[f"rev_{key}"] = rev
+        row[f"rev_share_{key}"] = round(rev / total_rev, 4)
+        row[f"first_sell_{key}"] = first_sell.get(prod)
+
+    return row
 
 
 def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -118,6 +116,7 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
             "margins": [],
             "strategies": Counter(),
             "openings": Counter(),
+            "primary_rev": Counter(),
         }
     )
     strategy_stats: dict[str, dict[str, Any]] = defaultdict(
@@ -127,6 +126,9 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
     opening_wins: Counter = Counter()
     corpus_op_counts: Counter = Counter()
     corpus_market_counts: Counter = Counter()
+    primary_rev_stats: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"games": 0, "wins": 0, "money_sum": 0.0}
+    )
 
     for ep in episodes:
         episode_rows.append({
@@ -167,6 +169,15 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
                 opening_stats[fp] += 1
                 if player["result"] == "win":
                     opening_wins[fp] += 1
+
+            primary = row.get("primary_rev")
+            if primary:
+                st["primary_rev"][primary] += 1
+                ps = primary_rev_stats[primary]
+                ps["games"] += 1
+                ps["money_sum"] += player["final_money"]
+                if player["result"] == "win":
+                    ps["wins"] += 1
 
             for tag in player.get("strategies") or []:
                 ss = strategy_stats[tag]
@@ -231,6 +242,9 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
             "top_strategies": ",".join(
                 f"{k}:{v}" for k, v in st["strategies"].most_common(5)
             ),
+            "top_primary_rev": ",".join(
+                f"{k}:{v}" for k, v in st["primary_rev"].most_common(3)
+            ),
             "top_opening": st["openings"].most_common(1)[0][0] if st["openings"] else "",
         })
     agents_table.sort(key=lambda r: (-r["avg_money"], -r["win_rate"], -r["games"]))
@@ -246,6 +260,18 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
             "avg_money": round(ss["money_sum"] / games, 1),
         })
     strategies_table.sort(key=lambda r: (-r["avg_money"], -r["games"]))
+
+    primary_rev_table = []
+    for prod, ps in primary_rev_stats.items():
+        games = ps["games"] or 1
+        primary_rev_table.append({
+            "primary_rev": prod,
+            "games": ps["games"],
+            "wins": ps["wins"],
+            "win_rate": round(ps["wins"] / games, 3),
+            "avg_money": round(ps["money_sum"] / games, 1),
+        })
+    primary_rev_table.sort(key=lambda r: (-r["avg_money"], -r["games"]))
 
     openings_table = []
     for fp, n in opening_stats.most_common():
@@ -276,6 +302,7 @@ def aggregate_corpus(episodes: list[dict[str, Any]]) -> dict[str, Any]:
         "market_orders": market_rows,
         "agents": agents_table,
         "strategies": strategies_table,
+        "primary_rev": primary_rev_table,
         "openings": openings_table,
         "op_counts": op_table,
         "market_op_counts": market_op_table,

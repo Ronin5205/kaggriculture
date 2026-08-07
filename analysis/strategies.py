@@ -1,8 +1,23 @@
-"""Rule-based strategy labels from extracted player features."""
+"""Feature-based multi-labels from extracted player stats."""
 
 from __future__ import annotations
 
 from typing import Any
+
+from .schema import ANIMALS, CROPS, PRODUCTS
+
+# Plant intensity: (high, mid) plant counts per crop.
+PLANT_THRESH: dict[str, tuple[int, int]] = {
+    "WHEAT": (40, 15),
+    "CARROT": (20, 5),
+    "TOMATO": (15, 4),
+    "STRAWBERRY": (40, 15),
+    "MELON": (20, 8),
+}
+
+REV_HIGH = 0.25
+REV_MID = 0.15
+PRIMARY_MIN = 0.15
 
 
 def _rev_share(sell_rev: dict, item: str, total: float) -> float:
@@ -11,12 +26,19 @@ def _rev_share(sell_rev: dict, item: str, total: float) -> float:
     return float(sell_rev.get(item) or 0) / total
 
 
-def label_strategies(summary: dict[str, Any]) -> list[str]:
-    """Return multi-label strategy tags.
+def _append_intensity(tags: list[str], prefix: str, value: float, high: float, mid: float) -> None:
+    if value >= high:
+        tags.append(f"{prefix}_high")
+    elif value >= mid:
+        tags.append(f"{prefix}_mid")
 
-    Thresholds are tuned against current leaderboard replay meta (heavy hire,
-    sheep/cow open, berry+dairy). Prefer revenue-share and intensity tags that
-    actually separate agents in this corpus.
+
+def label_strategies(summary: dict[str, Any]) -> list[str]:
+    """Return multi-label behavioral feature tags.
+
+    Tags describe measured intensities (open buys, board scale, plant mix,
+    care/fert use, revenue shares across every product). Thresholds are
+    heuristics — retune when the corpus distribution shifts.
     """
     tags: list[str] = []
 
@@ -32,32 +54,21 @@ def label_strategies(summary: dict[str, Any]) -> list[str]:
 
     # --- opening ---
     if open_animals >= 2:
-        tags.append("animal_open")
-    if open_melon >= 8:
-        tags.append("melon_rush")
-    elif open_melon >= 3:
-        tags.append("melon_lite")
-    if open_hires >= 7:
-        tags.append("hire_open_7")
-    elif open_hires >= 5:
-        tags.append("hire_open_5")
+        tags.append("open_animals")
+    _append_intensity(tags, "open_melon", open_melon, 8, 3)
+    _append_intensity(tags, "open_hire", open_hires, 7, 5)
 
     # --- board intensity ---
     peak_animals = int(summary.get("peak_animals") or 0)
-    if peak_animals >= 16:
-        tags.append("animal_max")
-    elif peak_animals >= 12:
-        tags.append("animal_core")
+    _append_intensity(tags, "animals", peak_animals, 16, 12)
 
-    geese = int(buy_animal.get("GOOSE") or 0) + int(place.get("GOOSE") or 0)
-    if geese > 0 or int(summary.get("build_coop") or 0) > 0:
-        tags.append("goose_line")
+    for animal in ANIMALS:
+        n = int(buy_animal.get(animal) or 0) + int(place.get(animal) or 0)
+        if n > 0 or (animal == "GOOSE" and int(summary.get("build_coop") or 0) > 0):
+            tags.append(animal.lower())
 
     median_hires = float(summary.get("median_daily_hires") or 0)
-    if median_hires >= 11:
-        tags.append("hire_ultra")
-    elif median_hires >= 9:
-        tags.append("hire_max")
+    _append_intensity(tags, "hires", median_hires, 11, 9)
 
     second_q = summary.get("second_quadrant_day")
     if second_q is not None and second_q <= 8:
@@ -67,68 +78,41 @@ def label_strategies(summary: dict[str, Any]) -> list[str]:
     elif int(summary.get("n_quadrants_final") or 1) <= 1:
         tags.append("land_none")
 
-    # --- crops ---
-    if int(plant.get("TOMATO") or 0) >= 4:
-        tags.append("tomato_line")
-    if int(plant.get("STRAWBERRY") or 0) >= 40:
-        tags.append("berry_plant_heavy")
-    if int(plant.get("MELON") or 0) >= 20:
-        tags.append("melon_plant_heavy")
+    # --- crops (all five) ---
+    for crop in CROPS:
+        high, mid = PLANT_THRESH[crop]
+        _append_intensity(tags, f"plants_{crop.lower()}", int(plant.get(crop) or 0), high, mid)
 
     wheat_ratio = float(summary.get("wheat_self_ratio") or 0)
     if wheat_ratio >= 0.4:
-        tags.append("wheat_self_sufficient")
+        tags.append("wheat_self_high")
     elif wheat_ratio <= 0.15:
-        tags.append("wheat_buyer")
+        tags.append("wheat_self_low")
 
-    # --- care / fertilizer ---
+    # --- care / fertilizer qty ---
     care = int(summary.get("care") or 0)
     feed = int(op_counts.get("FEED") or 0)
     if care >= 350:
-        tags.append("animal_care_ultra")
+        tags.append("care_high")
     elif care >= 300 and feed >= 280:
-        tags.append("animal_care_heavy")
+        tags.append("care_mid")
 
     fert_sold = int(sell_qty.get("FERTILIZER") or 0)
     fert_used = int(summary.get("fertilize") or 0)
     if fert_sold >= 250:
-        tags.append("fert_seller_heavy")
+        tags.append("fert_sell_high")
     elif fert_sold >= 150 and fert_sold > fert_used:
-        tags.append("fert_seller")
+        tags.append("fert_sell_mid")
 
-    # --- revenue engines (most discriminative) ---
+    # --- revenue mix (every sellable product) ---
     total_rev = float(summary.get("total_sell_revenue") or 0) or 1.0
-    shares = {
-        "berry": _rev_share(sell_rev, "STRAWBERRY", total_rev),
-        "dairy": _rev_share(sell_rev, "MILK", total_rev),
-        "wool": _rev_share(sell_rev, "WOOL", total_rev),
-        "melon": _rev_share(sell_rev, "MELON", total_rev),
-        "egg": _rev_share(sell_rev, "EGG", total_rev),
-        "wheat": _rev_share(sell_rev, "WHEAT", total_rev),
-    }
+    shares = {prod.lower(): _rev_share(sell_rev, prod, total_rev) for prod in PRODUCTS}
     primary = max(shares, key=shares.get)
-    if shares[primary] >= 0.18:
+    if shares[primary] >= PRIMARY_MIN:
         tags.append(f"primary_{primary}")
 
-    if shares["berry"] >= 0.28:
-        tags.append("berry_engine")
-    elif shares["berry"] >= 0.18:
-        tags.append("berry_support")
-
-    if shares["dairy"] >= 0.28:
-        tags.append("dairy_focus")
-    elif shares["dairy"] >= 0.18:
-        tags.append("dairy_support")
-
-    if shares["wool"] >= 0.25:
-        tags.append("wool_focus")
-    elif shares["wool"] >= 0.15:
-        tags.append("wool_support")
-
-    if shares["melon"] >= 0.25:
-        tags.append("melon_focus")
-    elif shares["melon"] >= 0.15:
-        tags.append("melon_support")
+    for key, share in shares.items():
+        _append_intensity(tags, f"rev_{key}", share, REV_HIGH, REV_MID)
 
     if not tags:
         tags.append("unclassified")
