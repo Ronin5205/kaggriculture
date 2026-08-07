@@ -6,15 +6,10 @@ from collections import Counter
 from typing import Any
 
 from .load import agent_names, episode_id, turns_per_day
+from .schema import ANIMALS, CROPS, PRODUCTS
 from .strategies import label_strategies
 
 
-CROPS = ("WHEAT", "CARROT", "TOMATO", "STRAWBERRY", "MELON")
-ANIMALS = ("GOOSE", "COW", "SHEEP")
-PRODUCTS = (
-    "WHEAT", "CARROT", "TOMATO", "STRAWBERRY", "MELON",
-    "EGG", "MILK", "WOOL", "FERTILIZER",
-)
 MOVE_OPS = {"NORTH", "SOUTH", "EAST", "WEST"}
 FIELD_OPS = {
     "WATER", "HARVEST", "PLANT", "FERTILIZE", "DIG",
@@ -369,14 +364,9 @@ def extract_player(
                 "fertilize": hour_ops.get("FERTILIZE", 0),
                 "pickup": hour_ops.get("PICKUP", 0),
                 "drop": hour_ops.get("DROP", 0),
-                "price_wheat": prices.get("WHEAT"),
-                "price_melon": prices.get("MELON"),
-                "price_strawberry": prices.get("STRAWBERRY"),
-                "price_milk": prices.get("MILK"),
-                "price_wool": prices.get("WOOL"),
-                "price_egg": prices.get("EGG"),
-                "price_fertilizer": prices.get("FERTILIZER"),
             }
+            for prod in PRODUCTS:
+                row_h[f"price_{prod.lower()}"] = prices.get(prod)
             # Board scan hourly is expensive; sample every 6 turns + day boundaries.
             if hour % 6 == 0 or hour == 0 or t == len(steps) - 1:
                 board = _scan_board(farm.get("tiles") or [])
@@ -440,7 +430,7 @@ def extract_player(
                 row[f"crop_{crop}"] = board.get(f"crop_{crop}", 0)
             for animal in ANIMALS:
                 row[f"animal_{animal}"] = board.get(f"animal_{animal}", 0)
-            for prod in ("WHEAT", "MELON", "STRAWBERRY", "MILK", "WOOL", "EGG", "FERTILIZER"):
+            for prod in PRODUCTS:
                 row[f"sell_qty_prev_{prod}"] = (
                     acc["sell_qty_by_day"].get(day - 1, Counter()).get(prod, 0) if day > 0 else 0
                 )

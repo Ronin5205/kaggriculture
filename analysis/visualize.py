@@ -12,17 +12,18 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
+from .schema import CROPS, PRODUCTS
 
 PRODUCT_COLORS = {
     "WHEAT": "#c4a35a",
-    "MELON": "#2e8b57",
-    "STRAWBERRY": "#d62828",
-    "MILK": "#4ea8de",
-    "WOOL": "#9b5de5",
-    "EGG": "#f4a261",
-    "FERTILIZER": "#6a994e",
     "CARROT": "#e76f51",
     "TOMATO": "#e63946",
+    "STRAWBERRY": "#d62828",
+    "MELON": "#2e8b57",
+    "EGG": "#f4a261",
+    "MILK": "#4ea8de",
+    "WOOL": "#9b5de5",
+    "FERTILIZER": "#6a994e",
 }
 
 
@@ -106,29 +107,41 @@ def plot_strategies(corpus: dict[str, Any], out: Path, top_n: int = 12) -> Path:
     fig, ax = plt.subplots(figsize=(10, 5.5))
     if not rows:
         rows = list(corpus.get("strategies") or [])[:top_n]
+    if not rows:
+        ax.text(0.5, 0.5, "No feature-tag data", ha="center")
+        return _save(fig, out / "strategies_avg_money.png")
+
     names = [r["strategy"] for r in rows][::-1]
     vals = [r["avg_money"] for r in rows][::-1]
     ax.barh(names, vals, color="#457b9d")
     ax.set_xlabel("Average final money")
-    ax.set_title("Strategy tags by average score")
+    ax.set_title("Feature tags by average score")
     ax.grid(True, axis="x", alpha=0.25)
     return _save(fig, out / "strategies_avg_money.png")
 
 
+def plot_primary_rev(corpus: dict[str, Any], out: Path) -> Path:
+    rows = list(corpus.get("primary_rev") or [])
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    if not rows:
+        ax.text(0.5, 0.5, "No primary-revenue data", ha="center")
+        return _save(fig, out / "primary_rev_avg_money.png")
+
+    names = [r["primary_rev"].upper() for r in rows][::-1]
+    vals = [r["avg_money"] for r in rows][::-1]
+    colors = [PRODUCT_COLORS.get(n, "#888888") for n in names]
+    ax.barh(names, vals, color=colors)
+    ax.set_xlabel("Average final money")
+    ax.set_title("Primary revenue product by average score")
+    ax.grid(True, axis="x", alpha=0.25)
+    return _save(fig, out / "primary_rev_avg_money.png")
+
+
 def plot_revenue_mix(corpus: dict[str, Any], out: Path) -> Path:
-    keys = [
-        ("rev_wheat", "WHEAT"),
-        ("rev_melon", "MELON"),
-        ("rev_strawberry", "STRAWBERRY"),
-        ("rev_milk", "MILK"),
-        ("rev_wool", "WOOL"),
-        ("rev_egg", "EGG"),
-        ("rev_fertilizer", "FERTILIZER"),
-    ]
     totals = Counter()
     for row in corpus.get("players") or []:
-        for col, name in keys:
-            totals[name] += float(row.get(col) or 0)
+        for prod in PRODUCTS:
+            totals[prod] += float(row.get(f"rev_{prod.lower()}") or 0)
 
     fig, ax = plt.subplots(figsize=(8, 8))
     labels = [k for k, v in totals.most_common() if v > 0]
@@ -142,6 +155,57 @@ def plot_revenue_mix(corpus: dict[str, Any], out: Path) -> Path:
     return _save(fig, out / "revenue_mix.png")
 
 
+def plot_plant_mix(corpus: dict[str, Any], out: Path) -> Path:
+    totals = Counter()
+    for row in corpus.get("players") or []:
+        for crop in CROPS:
+            totals[crop] += float(row.get(f"plants_{crop.lower()}") or 0)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    labels = [k for k, v in totals.most_common() if v > 0]
+    sizes = [totals[k] for k in labels]
+    colors = [PRODUCT_COLORS.get(k, "#888888") for k in labels]
+    if not sizes:
+        ax.text(0.5, 0.5, "No plant data", ha="center")
+    else:
+        ax.pie(sizes, labels=labels, colors=colors, autopct="%1.1f%%", startangle=90)
+        ax.set_title("Corpus plant-count mix")
+    return _save(fig, out / "plant_mix.png")
+
+
+def plot_rev_share_boxplot(corpus: dict[str, Any], out: Path) -> Path:
+    """Distribution of per-player revenue shares for every product."""
+    data = []
+    labels = []
+    colors = []
+    for prod in PRODUCTS:
+        shares = [
+            float(row.get(f"rev_share_{prod.lower()}") or 0)
+            for row in (corpus.get("players") or [])
+        ]
+        if not shares or max(shares) <= 0:
+            continue
+        data.append(shares)
+        labels.append(prod)
+        colors.append(PRODUCT_COLORS.get(prod, "#888888"))
+
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    if not data:
+        ax.text(0.5, 0.5, "No rev-share data", ha="center")
+        return _save(fig, out / "rev_share_box.png")
+
+    bp = ax.boxplot(data, tick_labels=labels, patch_artist=True, showfliers=False)
+    for patch, color in zip(bp["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    ax.set_ylabel("Revenue share")
+    ax.set_title("Per-player revenue-share distribution")
+    ax.set_ylim(0, 1)
+    ax.tick_params(axis="x", rotation=30)
+    ax.grid(True, axis="y", alpha=0.25)
+    return _save(fig, out / "rev_share_box.png")
+
+
 def plot_action_mix(corpus: dict[str, Any], out: Path) -> Path:
     ops = list(corpus.get("op_counts") or [])
     fig, ax = plt.subplots(figsize=(10, 5.5))
@@ -149,7 +213,6 @@ def plot_action_mix(corpus: dict[str, Any], out: Path) -> Path:
         ax.text(0.5, 0.5, "No action data", ha="center")
         return _save(fig, out / "action_mix.png")
 
-    # Collapse moves.
     collapsed: Counter = Counter()
     for row in ops:
         op = row["op"]
@@ -186,7 +249,6 @@ def plot_ops_by_day(corpus: dict[str, Any], out: Path) -> Path:
         day = int(row["day"])
         if day <= 0:
             continue
-        # These fields count previous day activity, stored on day D snapshot.
         prev = day - 1
         counts[prev] += 1
         for col, name in keys:
@@ -241,13 +303,12 @@ def plot_board_occupancy(corpus: dict[str, Any], out: Path) -> Path:
 
 def plot_market_prices(corpus: dict[str, Any], out: Path) -> Path:
     """Mean market prices by day from hourly samples."""
-    products = ["wheat", "melon", "strawberry", "milk", "wool", "egg", "fertilizer"]
+    products = [p.lower() for p in PRODUCTS]
     sums: dict[str, dict[int, float]] = {p: defaultdict(float) for p in products}
     counts: dict[str, dict[int, int]] = {p: defaultdict(int) for p in products}
 
     for row in corpus.get("hourly") or []:
         day = int(row["day"])
-        # Sample a few hours/day to reduce weight bias.
         if int(row.get("hour") or 0) not in (0, 12):
             continue
         for p in products:
@@ -273,7 +334,7 @@ def plot_market_prices(corpus: dict[str, Any], out: Path) -> Path:
     ax.set_title("Average market prices over season")
     ax.set_xlabel("Day")
     ax.set_ylabel("Price")
-    ax.legend(ncol=4, fontsize=8)
+    ax.legend(ncol=3, fontsize=8)
     ax.grid(True, alpha=0.25)
     return _save(fig, out / "market_prices.png")
 
@@ -305,7 +366,6 @@ def plot_showcase_episode(corpus: dict[str, Any], out: Path, episode_id: str | N
         return []
 
     written: list[Path] = []
-    # Money + occupancy for both players.
     daily = [r for r in (corpus.get("daily") or []) if str(r["episode_id"]) == eid and int(r.get("hour") or 0) == 0]
     hourly = [r for r in (corpus.get("hourly") or []) if str(r["episode_id"]) == eid]
     agents = {}
@@ -343,11 +403,9 @@ def plot_showcase_episode(corpus: dict[str, Any], out: Path, episode_id: str | N
     axes[1].grid(True, alpha=0.25)
     written.append(_save(fig, out / f"episode_{eid}_economy.png"))
 
-    # Action heatmap-like stacked area from hourly for player 0.
     fig2, ax2 = plt.subplots(figsize=(11, 5))
     p0 = [r for r in hourly if int(r["player"]) == 0]
     if p0:
-        # Aggregate to day totals.
         day_ops: dict[int, Counter] = defaultdict(Counter)
         for r in p0:
             d = int(r["day"])
@@ -366,7 +424,6 @@ def plot_showcase_episode(corpus: dict[str, Any], out: Path, episode_id: str | N
         ax2.text(0.5, 0.5, "No hourly data", ha="center")
     written.append(_save(fig2, out / f"episode_{eid}_actions.png"))
 
-    # Sell events timeline from market orders.
     markets = [r for r in (corpus.get("market_orders") or []) if str(r["episode_id"]) == eid and r.get("op") == "SELL"]
     fig3, ax3 = plt.subplots(figsize=(11, 5))
     if markets:
@@ -402,7 +459,10 @@ def generate_plots(
     paths.append(plot_money_curves(corpus, out))
     paths.append(plot_agents(corpus, out, top_n=top_n))
     paths.append(plot_strategies(corpus, out, top_n=top_n))
+    paths.append(plot_primary_rev(corpus, out))
     paths.append(plot_revenue_mix(corpus, out))
+    paths.append(plot_plant_mix(corpus, out))
+    paths.append(plot_rev_share_boxplot(corpus, out))
     paths.append(plot_action_mix(corpus, out))
     paths.append(plot_ops_by_day(corpus, out))
     paths.append(plot_board_occupancy(corpus, out))

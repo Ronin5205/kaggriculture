@@ -51,6 +51,7 @@ def write_outputs(
         "players": out / "players.csv",
         "agents": out / "agents.csv",
         "strategies": out / "strategies.csv",
+        "primary_rev": out / "primary_rev.csv",
         "openings": out / "openings.csv",
         "op_counts": out / "op_counts.csv",
         "market_op_counts": out / "market_op_counts.csv",
@@ -59,6 +60,7 @@ def write_outputs(
     _write_csv(paths["players"], corpus["players"])
     _write_csv(paths["agents"], corpus["agents"])
     _write_csv(paths["strategies"], corpus["strategies"])
+    _write_csv(paths["primary_rev"], corpus.get("primary_rev") or [])
     _write_csv(paths["openings"], corpus["openings"])
     _write_csv(paths["op_counts"], corpus.get("op_counts") or [])
     _write_csv(paths["market_op_counts"], corpus.get("market_op_counts") or [])
@@ -90,6 +92,7 @@ def write_outputs(
         "n_hourly_rows": len(corpus.get("hourly") or []),
         "top_agents": corpus["agents"][:10],
         "top_strategies": corpus["strategies"][:15],
+        "top_primary_rev": (corpus.get("primary_rev") or [])[:15],
         "top_ops": (corpus.get("op_counts") or [])[:15],
         "top_openings": [
             {
@@ -141,11 +144,20 @@ def print_summary(corpus: dict[str, Any], *, top_n: int = 10) -> None:
         )
 
     print()
-    print("Strategy tags (by avg money):")
-    print(f"  {'strategy':24s} {'games':>5} {'wr':>6} {'avg$':>10}")
+    print("Feature tags (by avg money):")
+    print(f"  {'tag':24s} {'games':>5} {'wr':>6} {'avg$':>10}")
     for row in corpus["strategies"][:15]:
         print(
             f"  {row['strategy'][:24]:24s} {row['games']:5d} {row['win_rate']:6.3f} "
+            f"{row['avg_money']:10.0f}"
+        )
+
+    print()
+    print("Primary revenue product (by avg money):")
+    print(f"  {'product':24s} {'games':>5} {'wr':>6} {'avg$':>10}")
+    for row in (corpus.get("primary_rev") or [])[:10]:
+        print(
+            f"  {row['primary_rev'][:24]:24s} {row['games']:5d} {row['win_rate']:6.3f} "
             f"{row['avg_money']:10.0f}"
         )
 
