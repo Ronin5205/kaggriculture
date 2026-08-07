@@ -276,17 +276,24 @@ CONFIGURATION_DEFAULTS = {
 import math
 
 # ---------------------------------------------------------------------------
-# Melon–Dairy Compound strategy targets
+# Labor–Herd Compound strategy targets
 # ---------------------------------------------------------------------------
 
 # Herd / crop targets by phase
-MELON_WAVE1 = 12
+MELON_WAVE1 = 6
 MELON_WAVE2 = 24
 TARGET_COWS = 10
-TARGET_SHEEP = 0          # deferred; optional late only
-WHEAT_FEED_TILES = 3      # grow feed; buy product only for gaps
-TARGET_HANDS_MAX = 10
-TARGET_HANDS_MIN = 4
+TARGET_SHEEP = 9
+WHEAT_FEED_TILES = 4      # modest self-grow; prefer BUY_PRODUCT for feed
+STRAWBERRY_WAVE1 = 8      # after wave-1 melons / early land
+STRAWBERRY_TARGET = 40    # season plant count (meta ~41)
+TARGET_HANDS_MAX = 12
+TARGET_HANDS_MIN = 6
+DAY0_HIRES = 6
+DAY0_MELON_SEEDS = 6
+DAY0_WHEAT_SEEDS = 12
+DAY0_COWS = 2
+DAY0_SHEEP = 2
 
 # Phase day boundaries
 WAVE1_END_DAY = 10
@@ -296,14 +303,14 @@ SHORT_CYCLE_DAY = 23          # wheat short-cycle starts
 CASHOUT_DAY = 28              # force sell-down
 CASHOUT_FORCE_FLOOR_TURNS = 12  # last N turns: sell even near $1
 
-LAND_BUY_DAY = 7              # NE first; SW if tile-short for wave 2
-LAND_ORDER = ("NE", "SW")     # never SE
+LAND_BUY_DAY = 4              # NE early; SW if tile-short
+LAND_ORDER = ("NE", "SW")     # SE optional only if cash-rich elsewhere
 
 # Legacy alias used by older helpers
 META_TARGETS = {
     "COW": TARGET_COWS,
     "SHEEP": TARGET_SHEEP,
-    "STRAWBERRY": 0,
+    "STRAWBERRY": STRAWBERRY_TARGET,
     "WHEAT": WHEAT_FEED_TILES,
     "HANDS": TARGET_HANDS_MAX,
     "LAND": ("NW", "NE", "SW"),
@@ -328,17 +335,18 @@ SELL_BATCH = {
 SELL_PRICE_FLOOR_FRAC = 0.15
 # Never hold milk/fert hoping for a bounce — sell down to a low absolute floor
 SELL_ABSOLUTE_MIN = {
-    "MILK": 8,
-    "FERTILIZER": 15,
-    "MELON": 20,
-    "WOOL": 10,
+    "MILK": 4,
+    "FERTILIZER": 10,
+    "MELON": 15,
+    "WOOL": 5,
+    "STRAWBERRY": 5,
     "WHEAT": 5,
 }
 
 # Hire: target_hands = clamp(2 + animals + ceil(plants/3), MIN, MAX)
 HIRE_BASE = 2
 HIRE_PLANTS_PER_HAND = 3
-MAX_HIRES_PER_TURN = 4
+MAX_HIRES_PER_TURN = 6
 
 # Shed-adjacent standing tiles (orthogonal access to shed)
 SHED_ADJACENT = ((4, 4), (5, 4), (4, 5), (5, 5))

@@ -1,4 +1,4 @@
-"""Melon–Dairy Compound agent — two-wave melons + CARE dairy + metered sells."""
+"""Labor–Herd Compound agent — day-0 pack, CARE dairy/sheep, straw + melons."""
 
 from .state_tile import analyze_farm
 from .market_policy import build_market_orders
@@ -9,8 +9,8 @@ def agent(obs):
     """
     Observation → action dict.
 
-    Strategy: 12→24 watered melons, scale to ~10 CARE'd cows, metered sells,
-    late wheat short-cycle, endgame shed cashout. Pastures near shed; crops out.
+    Strategy: day-0 6hire/melon6/wheat12/cow2/sheep2, scale to ~20 CARE'd
+    animals, strawberries + melon wave-2, early land, metered sells, cashout.
     """
     if not isinstance(obs, dict):
         try:

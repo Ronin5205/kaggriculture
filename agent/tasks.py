@@ -1,4 +1,4 @@
-"""Priority tile jobs — Melon–Dairy Compound strategy."""
+"""Priority tile jobs — Labor–Herd Compound strategy."""
 
 from .constants import (
     MELON_WAVE1,
@@ -6,6 +6,8 @@ from .constants import (
     TARGET_COWS,
     TARGET_SHEEP,
     WHEAT_FEED_TILES,
+    STRAWBERRY_WAVE1,
+    STRAWBERRY_TARGET,
     WAVE1_END_DAY,
     NO_LONG_CROP_AFTER_DAY,
     SHORT_CYCLE_DAY,
@@ -23,18 +25,19 @@ from .pathing import (
     sort_by_shed_near,
 )
 
-# Lower = sooner. Water + harvest + plant before CARE (dairy still daily later).
+# Lower = sooner.
 PRIO_FEED = 10
 PRIO_PLACE = 11
 PRIO_BUILD = 12
-PRIO_WATER_MELON = 13
-PRIO_HARVEST = 14
-PRIO_PLANT_MELON = 15
-PRIO_WATER = 20
-PRIO_CARE = 22
+PRIO_PLANT_MELON = 13
+PRIO_CARE = 14
+PRIO_WATER_MELON = 15
+PRIO_HARVEST = 16
+PRIO_WATER = 18
+PRIO_PLANT_STRAW = 22
+PRIO_DIG = 28
 PRIO_FERT_COLLECT = 35
-PRIO_FERTILIZE = 70
-PRIO_DIG = 75
+PRIO_FERTILIZE = 55
 PRIO_PLANT = 100
 
 
@@ -63,6 +66,44 @@ def _melon_target(day):
     return 0
 
 
+def _sheep_target(day):
+    if day <= 8:
+        return 2
+    if day <= 12:
+        return 4
+    if day <= 16:
+        return 6
+    if day <= 20:
+        return 8
+    return TARGET_SHEEP
+
+
+def _cow_target(day):
+    if day <= 8:
+        return 2
+    if day <= 12:
+        return 4
+    if day <= 16:
+        return 6
+    if day <= 20:
+        return 8
+    return TARGET_COWS
+
+
+def _strawberry_want(day, melon_now):
+    if day > NO_LONG_CROP_AFTER_DAY:
+        return 0
+    if day <= 3:
+        return 0
+    if day <= WAVE1_END_DAY:
+        if melon_now >= MELON_WAVE1 - 1:
+            return STRAWBERRY_WAVE1
+        return 0
+    if day <= 16:
+        return 24
+    return STRAWBERRY_TARGET
+
+
 def build_tasks(obs, summary, claimed):
     player = obs.get("player", 0)
     me = obs["farms"][player]
@@ -85,23 +126,19 @@ def build_tasks(obs, summary, claimed):
         + int(shed.get("SHEEP", 0) or 0)
     )
     melon_now = crop_counts.get("MELON", 0)
-    # Match market_policy herd ramp (day-based, not only melon count)
-    if day <= WAVE1_END_DAY:
-        cow_target = 3
-    elif day <= 14:
-        cow_target = 5
-    elif day <= 18:
-        cow_target = 8
-    else:
-        cow_target = TARGET_COWS
+    straw_now = crop_counts.get("STRAWBERRY", 0)
+    cow_target = _cow_target(day)
+    sheep_target = _sheep_target(day)
+    herd_target = cow_target + sheep_target
     wave1_rush = melon_now < MELON_WAVE1 and day <= WAVE1_END_DAY
-    # During melon rush: at most 1 pasture. After: house entire owned herd.
-    if wave1_rush:
-        pasture_target = 1 if owned > 0 else 0
+
+    # House the whole owned herd ASAP (animals escape if unplaced/unfed).
+    if owned > 0:
+        pasture_target = max(owned, min(herd_target, owned + 1))
     else:
-        pasture_target = min(cow_target + TARGET_SHEEP, max(owned, 1))
-        if day > WAVE1_END_DAY:
-            pasture_target = min(cow_target + TARGET_SHEEP, max(owned + 1, 2))
+        pasture_target = 0
+    if day > 0 and owned >= 2:
+        pasture_target = max(pasture_target, min(herd_target, owned + 1))
     pasture_gap = max(0, pasture_target - n_pastures)
 
     empty = [p for p in summary.get("empty") or [] if p not in claimed]
@@ -115,14 +152,16 @@ def build_tasks(obs, summary, claimed):
             t["item"] = item
         tasks.append(t)
 
-    # Water existing melons before planting more. Plant before CARE so wave-2
-    # seeds are not stranded, but never above watering.
     seeds_waiting = int(seeds.get("MELON", 0) or 0) > 0 and melon_now < _melon_target(day)
-    plant_prio = PRIO_PLANT_MELON if (wave1_rush or seeds_waiting) else PRIO_PLANT_MELON + 5
-    build_prio = PRIO_BUILD + (5 if wave1_rush else 0)
-    place_prio = PRIO_PLACE + (5 if wave1_rush else 0)
+    straw_waiting = int(seeds.get("STRAWBERRY", 0) or 0) > 0
+    # Early: plant opener seeds before housing animals (shed is safe).
+    early_plant = day <= 2 and (melon_now < MELON_WAVE1 or int(seeds.get("WHEAT", 0) or 0) > 0)
+    plant_prio = 11 if early_plant else (PRIO_PLANT_MELON if (wave1_rush or seeds_waiting) else PRIO_PLANT_MELON + 3)
+    care_prio = 12 if owned >= 6 else PRIO_CARE
+    build_prio = PRIO_BUILD + (6 if early_plant else 0)
+    place_prio = PRIO_PLACE + (6 if early_plant else 0)
+    dig_prio = 17 if len(summary.get("weeds") or []) >= 8 else PRIO_DIG
 
-    # Feed first — animals escape if starved.
     for pos in summary.get("unfed_animals") or []:
         add(PRIO_FEED, pos, "FEED")
 
@@ -135,11 +174,10 @@ def build_tasks(obs, summary, claimed):
             add(PRIO_WATER, pos, "WATER")
 
     for pos in summary.get("uncared_animals") or []:
-        add(PRIO_CARE, pos, "CARE")
+        add(care_prio, pos, "CARE")
     for pos in summary.get("harvestable_animals") or []:
         add(PRIO_HARVEST, pos, "HARVEST")
-    # One-time crops: never early-harvest (destroys plant for ~1 unit).
-    # Melon: wait until max_yield day (10). Wheat/carrot: first_yield day.
+
     for pos in summary.get("harvestable_plants") or []:
         x, y = pos
         tile = tiles[y][x]
@@ -162,40 +200,50 @@ def build_tasks(obs, summary, claimed):
             if age < ready_day:
                 continue
         add(PRIO_HARVEST, pos, "HARVEST")
+
     for pos in summary.get("collectible_fertilizer") or []:
         add(PRIO_FERT_COLLECT, pos, "COLLECT_FERTILIZER")
 
-    # Fertilize wheat only.
+    # Fertilize melons/straw in growth windows; wheat secondary
     fert_avail = int(shed.get("FERTILIZER", 0) or 0)
-    for x, y, crop in summary.get("plants") or []:
-        if crop != "WHEAT":
-            continue
-        tile = tiles[y][x]
-        if tile.get("fertilized_until_day", -1) >= day:
-            continue
+    fert_crops = ("MELON", "STRAWBERRY", "WHEAT")
+    for crop_name in fert_crops:
         if fert_avail <= 0:
             break
-        add(PRIO_FERTILIZE, (x, y), "FERTILIZE")
-        fert_avail -= 1
+        for x, y, crop in summary.get("plants") or []:
+            if crop != crop_name:
+                continue
+            tile = tiles[y][x]
+            if not isinstance(tile, dict):
+                continue
+            if tile.get("fertilized_until_day", -1) >= day:
+                continue
+            if fert_avail <= 0:
+                break
+            add(PRIO_FERTILIZE, (x, y), "FERTILIZE")
+            fert_avail -= 1
 
     for pos in summary.get("weeds") or []:
-        add(PRIO_DIG, pos, "DIG")
+        add(dig_prio, pos, "DIG")
 
-    if pasture_gap > 0:
-        for pos in pasture_empties(empty)[:pasture_gap]:
+    # Cap early pasture builds so opener seeds get planted first
+    build_n = pasture_gap
+    if early_plant:
+        build_n = min(pasture_gap, 2)
+    if build_n > 0:
+        for pos in pasture_empties(empty)[:build_n]:
             add(build_prio, pos, "BUILD_PASTURE")
 
     empty_structs = [
         p for p in summary.get("structures_empty") or [] if p not in claimed
     ]
     cow_gap = cow_target - n_cows
-    sheep_gap = TARGET_SHEEP - n_sheep
-    # Also place when cows sit in shed even above cow_target count mismatch
+    sheep_gap = sheep_target - n_sheep
     shed_cows = int(shed.get("COW", 0) or 0)
     shed_sheep = int(shed.get("SHEEP", 0) or 0)
     for pos in empty_structs:
         tile = _tile_at(farm, pos)
-        if tile.get("kind") != "PASTURE":
+        if not isinstance(tile, dict) or tile.get("kind") != "PASTURE":
             continue
         if cow_gap > 0 or shed_cows > 0:
             add(place_prio, pos, "PLACE", "COW")
@@ -206,36 +254,41 @@ def build_tasks(obs, summary, claimed):
             sheep_gap -= 1
             shed_sheep = max(0, shed_sheep - 1)
 
-    # Planting — wave-1: nearest empties first (avoid corner thrash).
     melon = melon_now
     melon_want = _melon_target(day)
+    straw = straw_now
+    straw_want = _strawberry_want(day, melon_now)
     reserve = 0 if (wave1_rush or seeds_waiting) else pasture_gap
     plant_tiles = plantable_empties(empty, reserve_near_for_pastures=reserve)
     if wave1_rush or seeds_waiting:
         plant_tiles = sort_by_shed_near([p for p in empty if not is_shed_adjacent(p)])
+
     wheat = crop_counts.get("WHEAT", 0)
     seed_left = {
         "WHEAT": int(seeds.get("WHEAT", 0) or 0),
         "MELON": int(seeds.get("MELON", 0) or 0),
+        "STRAWBERRY": int(seeds.get("STRAWBERRY", 0) or 0),
     }
 
     want_wheat = WHEAT_FEED_TILES
     if day >= SHORT_CYCLE_DAY:
         want_wheat = max(want_wheat, 8)
-    if day <= WAVE1_END_DAY and melon < melon_want:
-        want_wheat = 0
+    # Plant day-0 wheat seeds for feed (avoid buying all feed)
+    if day <= 5:
+        want_wheat = max(want_wheat, min(12, seed_left["WHEAT"] + wheat))
+    if day <= WAVE1_END_DAY and melon < melon_want and day > 0:
+        # After day 0, still allow some wheat alongside melons
+        want_wheat = max(want_wheat, 4)
 
-    # Cap new plantings so watering stays ahead — but never stall wave-1,
-    # and always allow a few plants when seeds are waiting.
     labor = 1 + len(me.get("hands") or [])
     n_unwatered = len(summary.get("unwatered_plants") or [])
     n_unfed = len(summary.get("unfed_animals") or [])
+    n_uncared = len(summary.get("uncared_animals") or [])
     if wave1_rush:
         max_new_plants = 99
     else:
-        reserved = n_unfed + min(n_unwatered, max(labor - 3, 0))
-        # After payday, plant aggressively to land wave-2
-        floor = 6 if seeds_waiting and day > WAVE1_END_DAY else (3 if seeds_waiting else 0)
+        reserved = n_unfed + n_uncared + min(n_unwatered, max(labor - 3, 0))
+        floor = 6 if seeds_waiting and day > WAVE1_END_DAY else (3 if (seeds_waiting or straw_waiting) else 0)
         max_new_plants = max(floor, labor - reserved)
     plants_added = 0
 
@@ -246,6 +299,10 @@ def build_tasks(obs, summary, claimed):
             crop = "MELON"
             melon += 1
             prio = plant_prio
+        elif straw < straw_want and seed_left["STRAWBERRY"] > 0 and day <= NO_LONG_CROP_AFTER_DAY:
+            crop = "STRAWBERRY"
+            straw += 1
+            prio = PRIO_PLANT_STRAW
         elif wheat < want_wheat and seed_left["WHEAT"] > 0:
             crop = "WHEAT"
             wheat += 1
@@ -254,7 +311,6 @@ def build_tasks(obs, summary, claimed):
             wheat += 1
         if crop is None:
             continue
-        # Don't schedule more plantings than free labor after water/feed
         if plants_added >= max_new_plants:
             break
         seed_left[crop] -= 1
@@ -304,7 +360,6 @@ def assign_unit_action(pos, inv, obs, summary, tasks, claimed):
             return ["PLACE", carrying_animal]
         return list(step_toward(pos, target, board_size))
 
-    # Feed
     if unfed and _inv_count(inv, "WHEAT") < 1 and shed.get("WHEAT", 0) > 0:
         if is_shed_adjacent(pos):
             return ["PICKUP", "WHEAT", min(8, int(shed.get("WHEAT", 0)))]
@@ -318,7 +373,6 @@ def assign_unit_action(pos, inv, obs, summary, tasks, claimed):
                 return ["FEED"]
             return list(step_toward(pos, target, board_size))
 
-    # DROP produce aggressively so market can sell (especially melon payday)
     if not carrying_animal and is_shed_adjacent(pos):
         produce_keys = (
             "MELON", "STRAWBERRY", "MILK", "WOOL", "FERTILIZER",
@@ -326,11 +380,9 @@ def assign_unit_action(pos, inv, obs, summary, tasks, claimed):
         )
         if any(_inv_count(inv, k) > 0 for k in produce_keys):
             return ["DROP"]
-        # Wheat drop only if no unfed and surplus
         if _inv_count(inv, "WHEAT") > 0 and not unfed and (in_cashout or _inv_count(inv, "WHEAT") > 3):
             return ["DROP"]
 
-    # Bank harvested produce before more field work
     if not carrying_animal and any(
         _inv_count(inv, k) > 0
         for k in ("MELON", "MILK", "WOOL", "FERTILIZER", "STRAWBERRY")
@@ -371,7 +423,6 @@ def assign_unit_action(pos, inv, obs, summary, tasks, claimed):
             if task["act"] == "PLACE":
                 return ["PLACE", task["item"]]
             return [task["act"]]
-        # Walking toward task — keep claim so two units don't collide on same tile
         return list(step_toward(pos, task["pos"], board_size))
 
     if is_shed_adjacent(pos) and not carrying_animal:
@@ -384,11 +435,9 @@ def assign_unit_action(pos, inv, obs, summary, tasks, claimed):
     if empty_pastures and (shed.get("COW", 0) or shed.get("SHEEP", 0)) and not carrying_animal:
         return list(step_toward(pos, nearest_shed_tile(pos), board_size))
 
-    # Cashout: dump inventory
     if in_cashout and _inv_total(inv) > 0 and not is_shed_adjacent(pos):
         return list(step_toward(pos, nearest_shed_tile(pos), board_size))
 
-    # Idle at shed — avoid field thrash
     if not is_shed_adjacent(pos):
         return list(step_toward(pos, nearest_shed_tile(pos), board_size))
     return ["PASS"]
