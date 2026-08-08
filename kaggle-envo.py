@@ -1,0 +1,2 @@
+import kaggle_environments
+print(kaggle_environments.__version__)
