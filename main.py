@@ -11,7 +11,7 @@ The loader adds this file's directory to sys.path during exec, so the sibling
 Submit the multi-file bundle (from repo root):
 
     tar -czf submission.tar.gz main.py agent
-    kaggle competitions submit kaggriculture -f submission.tar.gz -m "goose egg engine"
+    kaggle competitions submit kaggriculture -f submission.tar.gz -m "engine-name-here"
 """
 
 from agent.agent import agent  # must remain the last top-level callable
