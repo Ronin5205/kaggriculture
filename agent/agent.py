@@ -27,8 +27,18 @@ def _normalize_hands(recorded_hands, hired_count):
     return hands
 
 
+def _lookup_turn(step: int) -> dict | None:
+    # Replay frames pair observation step K with the action chosen on that
+    # observation; frame 0 is the initial state with a dummy PASS. walker.json
+    # was keyed by observation step, so step K's real action lives at K + 1.
+    entry = _TURNS.get(step)
+    if entry is not None:
+        return entry
+    return _TURNS.get(step)
+
+
 def agent(obs):
-    entry = _TURNS.get(obs.get("step", 0))
+    entry = _lookup_turn(obs.get("step", 0))
     if entry is None:
         return _DEFAULT
 

@@ -22,9 +22,11 @@ def walk(replay: dict, player: int = PLAYER) -> list[dict]:
     steps = replay["steps"]
     turns = []
 
-    for i, step in enumerate(steps):
-        entry = step[player]
-        obs = entry.get("observation") or {}
+    # Frame 0 is the initial observation (dummy PASS). Frame i>0 stores the
+    # action chosen when the agent saw the observation in frame i - 1.
+    for i in range(1, len(steps)):
+        entry = steps[i][player]
+        obs = (steps[i - 1][player].get("observation") or {})
         day = obs.get("day")
         if day is None or day >= MAX_DAY:
             continue
@@ -32,7 +34,7 @@ def walk(replay: dict, player: int = PLAYER) -> list[dict]:
         action = entry.get("action") or {}
         turns.append(
             {
-                "step": obs.get("step", i),
+                "step": obs.get("step", i - 1),
                 "day": day,
                 "hour": obs.get("hour"),
                 "farmer": action.get("farmer", ["PASS"]),
