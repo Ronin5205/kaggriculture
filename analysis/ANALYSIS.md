@@ -10,7 +10,7 @@ Offline toolkit for mining Kaggriculture Kaggle episode replays: per-player stat
 
 pip install matplotlib numpy   # stdlib otherwise
 
-python analyze_replays.py
+python -m analysis
 ```
 
 Defaults:
@@ -24,19 +24,25 @@ Defaults:
 
 ```bash
 # Full corpus
-python analyze_replays.py --verbose
+python -m analysis --verbose
 
 # One episode + custom showcase plots
-python analyze_replays.py --episode 90503598 --plot-episode 90503598
+python -m analysis --episode 90503598 --plot-episode 90503598
 
 # Filter exported player / action / market rows to one agent
-python analyze_replays.py --agent "Mohit Rao"
+python -m analysis --agent "Mohit Rao"
 
 # Faster / smaller run
-python analyze_replays.py --no-actions --no-hourly --no-plots
+python -m analysis --no-actions --no-hourly --no-plots
 
 # Parallel extract (optional)
-python analyze_replays.py --jobs 4
+python -m analysis --jobs 4
+
+# Extract player-0 actions from a replay into agent/walker.json
+python -m analysis.replay_walker
+
+# Pretty-print pretty_replay/replay.json → pretty_replay/replay_pretty.json
+python -m analysis.pretty_replays
 ```
 
 ### CLI flags
@@ -64,8 +70,12 @@ python analyze_replays.py --jobs 4
 ## Layout
 
 ```
-analyze_replays.py          # CLI entrypoint
+agent/                      # Kaggle submission package (action.py, agent.py, walker.json)
 analysis/
+  __main__.py               # CLI entrypoint (`python -m analysis`)
+  analyze_replays.py        # argparse + batch runner
+  replay_walker.py          # extract player actions → agent/walker.json
+  pretty_replays.py         # format replay JSON for inspection
   schema.py                 # shared CROPS / ANIMALS / PRODUCTS
   load.py                   # discover + load replay JSON
   extract.py                # per-player stats, action/market logs, daily/hourly

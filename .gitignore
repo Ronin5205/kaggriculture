@@ -44,10 +44,10 @@ submission.tar.gz
 *.tar.gz
 
 # Replays & logs
-replays/
-logs/
+replays/*
+logs/*
 replay.json
 
 # Analyzer outputs
-analysis_out/
-pretty_replay/
+analysis_out/*
+pretty_replay/*

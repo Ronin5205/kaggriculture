@@ -2,11 +2,11 @@
 """Analyze Kaggriculture replay JSONs and extract stats / strategies.
 
 Examples:
-    python analyze_replays.py
-    python analyze_replays.py --replays replays --out analysis_out --plots
-    python analyze_replays.py --agent "Mohit Rao" --verbose
-    python analyze_replays.py --episode 90503598 --plot-episode 90503598
-    python analyze_replays.py --no-actions   # skip huge actions.csv
+    python -m analysis.analyze_replays
+    python -m analysis.analyze_replays --replays replays --out analysis_out --plots
+    python -m analysis.analyze_replays --agent "Mohit Rao" --verbose
+    python -m analysis.analyze_replays --episode 90503598 --plot-episode 90503598
+    python -m analysis.analyze_replays --no-actions   # skip huge actions.csv
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-from analysis.aggregate import aggregate_corpus
-from analysis.extract import extract_episode
-from analysis.load import discover_replays, load_replay
-from analysis.report import print_summary, write_outputs
+from .aggregate import aggregate_corpus
+from .extract import extract_episode
+from .load import discover_replays, load_replay
+from .report import print_summary, write_outputs
 
 
 def _analyze_one(
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     plot_paths: list[Path] = []
     if do_plots:
         try:
-            from analysis.visualize import generate_plots
+            from .visualize import generate_plots
 
             plot_episode = args.plot_episode or args.episode
             plot_paths = generate_plots(

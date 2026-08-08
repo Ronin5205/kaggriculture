@@ -17,6 +17,25 @@ def discover_replays(replays_dir: Path | str) -> list[Path]:
     return paths
 
 
+def resolve_replay_path(replays_dir: Path | str, name: str | None) -> Path:
+    paths = discover_replays(replays_dir)
+    if name is None:
+        return paths[-1]
+
+    needle = name.replace(".json", "")
+    matches = [p for p in paths if p.stem == needle or needle in p.stem]
+    if not matches:
+        available = ", ".join(p.name for p in paths)
+        raise FileNotFoundError(
+            f"No replay matching {name!r} in {replays_dir}\n"
+            f"Available: {available}"
+        )
+    if len(matches) > 1:
+        names = ", ".join(p.name for p in matches)
+        raise ValueError(f"Replay name {name!r} is ambiguous: {names}")
+    return matches[0]
+
+
 def load_replay(path: Path | str) -> dict[str, Any]:
     path = Path(path)
     with path.open(encoding="utf-8") as f:
